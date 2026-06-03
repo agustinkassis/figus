@@ -5,6 +5,9 @@ import {
   hasNip07,
   loginLocal,
   loginNip07,
+  loginNip46Bunker,
+  loginNip46QR,
+  restoreNip46,
   logoutLocal,
   clearPersistedMode,
   getPersistedMode,
@@ -33,7 +36,7 @@ export function useIdentity() {
         } else if (attempts < 10) {
           setTimeout(() => tryNip07(attempts + 1), 200);
         } else {
-          clearPersistedMode(); // extensión no disponible, limpiar
+          clearPersistedMode();
         }
       };
       tryNip07();
@@ -43,6 +46,13 @@ export function useIdentity() {
       } catch {
         /* noop */
       }
+    } else if (mode === "nip46") {
+      restoreNip46()
+        .then((id) => {
+          if (id) setIdentity(id);
+          else clearPersistedMode();
+        })
+        .catch(() => clearPersistedMode());
     }
   }, []);
 
@@ -55,11 +65,39 @@ export function useIdentity() {
     setIdentity(loginLocal());
   }, []);
 
+  const connectNip46Bunker = useCallback(
+    async (url: string, onauth?: (authUrl: string) => void) => {
+      const id = await loginNip46Bunker(url, onauth);
+      setIdentity(id);
+    },
+    []
+  );
+
+  const connectNip46QR = useCallback(
+    async (
+      onQR: (uri: string, dataUrl: string, expiresAt: number) => void,
+      onauth?: (authUrl: string) => void,
+      signal?: AbortSignal
+    ) => {
+      const id = await loginNip46QR(onQR, onauth, signal);
+      setIdentity(id);
+    },
+    []
+  );
+
   const logout = useCallback(() => {
     if (identity?.mode === "local") logoutLocal();
     else clearPersistedMode();
     setIdentity(null);
   }, [identity]);
 
-  return { identity, nip07Available, connectNip07, connectLocal, logout };
+  return {
+    identity,
+    nip07Available,
+    connectNip07,
+    connectLocal,
+    connectNip46Bunker,
+    connectNip46QR,
+    logout,
+  };
 }

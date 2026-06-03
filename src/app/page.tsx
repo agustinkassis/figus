@@ -37,7 +37,7 @@ export default function Home() {
 
 function HomeInner() {
   const { t, lang, toggle: toggleLang } = useLang();
-  const { identity, nip07Available, connectNip07, connectLocal, logout } =
+  const { identity, nip07Available, connectNip07, connectLocal, connectNip46QR, connectNip46Bunker, logout } =
     useIdentity();
   const pubkey = identity?.pubkey ?? null;
   const { ownership, listings, settlements, owned, dupes, loading, refresh, hasClaimedFreePack } =
@@ -435,6 +435,8 @@ function HomeInner() {
             onNip07={connectNip07}
             onLocal={connectLocal}
             onLogout={logout}
+            onNip46QR={connectNip46QR}
+            onNip46Bunker={connectNip46Bunker}
           />
         </div>
       </header>

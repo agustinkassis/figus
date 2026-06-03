@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { Identity } from "@/lib/identity";
 import { useProfile } from "@/hooks/useProfile";
 import { useLang } from "@/contexts/LangContext";
+
+type NcView = "menu" | "qr" | "bunker" | "connecting";
 
 export function Connect({
   identity,
@@ -11,17 +13,135 @@ export function Connect({
   onNip07,
   onLocal,
   onLogout,
+  onNip46QR,
+  onNip46Bunker,
 }: {
   identity: Identity | null;
   nip07Available: boolean;
   onNip07: () => void;
   onLocal: () => void;
   onLogout: () => void;
+  onNip46QR: (
+    onQR: (uri: string, dataUrl: string, expiresAt: number) => void,
+    onauth: (url: string) => void,
+    signal: AbortSignal
+  ) => Promise<void>;
+  onNip46Bunker: (url: string, onauth: (url: string) => void) => Promise<void>;
 }) {
   const { t } = useLang();
   const profile = useProfile(identity?.pubkey ?? null);
   const [imgError, setImgError] = useState(false);
 
+  // Modal state
+  const [showModal, setShowModal] = useState(false);
+  const [ncView, setNcView] = useState<NcView>("menu");
+  const [qrUri, setQrUri] = useState<string | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [qrExpiresAt, setQrExpiresAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const [bunkerUrl, setBunkerUrl] = useState("");
+  const [ncError, setNcError] = useState<string | null>(null);
+  const [authUrl, setAuthUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Countdown timer
+  useEffect(() => {
+    if (!qrExpiresAt) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [qrExpiresAt]);
+
+  // ESC to close
+  useEffect(() => {
+    if (!showModal) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeModal();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [showModal]);
+
+  function closeModal() {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setShowModal(false);
+    setNcView("menu");
+    setQrUri(null);
+    setQrDataUrl(null);
+    setQrExpiresAt(null);
+    setBunkerUrl("");
+    setNcError(null);
+    setAuthUrl(null);
+  }
+
+  async function startQR() {
+    setNcView("qr");
+    setNcError(null);
+    setQrUri(null);
+    setQrDataUrl(null);
+    setAuthUrl(null);
+
+    const abort = new AbortController();
+    abortRef.current = abort;
+
+    try {
+      await onNip46QR(
+        (uri, dataUrl, expiresAt) => {
+          setQrUri(uri);
+          setQrDataUrl(dataUrl);
+          setQrExpiresAt(expiresAt);
+        },
+        (url) => setAuthUrl(url),
+        abort.signal
+      );
+      closeModal();
+    } catch (e: unknown) {
+      if (abort.signal.aborted) return;
+      const msg = e instanceof Error ? e.message : "No se pudo conectar";
+      if (msg.includes("timeout") || msg.includes("AbortError")) {
+        setNcView("menu");
+        setQrUri(null);
+        setQrDataUrl(null);
+        return;
+      }
+      setNcError(msg);
+    }
+  }
+
+  async function handleBunkerConnect() {
+    if (!bunkerUrl.trim()) return;
+    setNcView("connecting");
+    setNcError(null);
+    setAuthUrl(null);
+    try {
+      await onNip46Bunker(bunkerUrl, (url) => setAuthUrl(url));
+      closeModal();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "No se pudo conectar";
+      setNcError(msg);
+      setNcView("bunker");
+    }
+  }
+
+  async function copyUri() {
+    if (!qrUri) return;
+    try {
+      await navigator.clipboard.writeText(qrUri);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* noop */ }
+  }
+
+  const remainingMs = qrExpiresAt ? Math.max(0, qrExpiresAt - now) : null;
+  const countdown =
+    remainingMs !== null
+      ? `${Math.floor(remainingMs / 60000)}:${String(
+          Math.floor((remainingMs % 60000) / 1000)
+        ).padStart(2, "0")}`
+      : null;
+
+  // --- Logged in view ---
   if (identity) {
     const displayName = profile?.name
       ? profile.name.length > 16
@@ -37,21 +157,21 @@ export function Connect({
 
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        {/* Avatar + name */}
         <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-          {/* Avatar circle */}
-          <div style={{
-            width: 30,
-            height: 30,
-            borderRadius: "50%",
-            overflow: "hidden",
-            border: "1.5px solid var(--gold)",
-            flexShrink: 0,
-            background: "var(--panel2)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}>
+          <div
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: "50%",
+              overflow: "hidden",
+              border: "1.5px solid var(--gold)",
+              flexShrink: 0,
+              background: "var(--panel2)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
             {showImg ? (
               <img
                 src={profile!.picture}
@@ -62,29 +182,34 @@ export function Connect({
                 onError={() => setImgError(true)}
               />
             ) : (
-              <span style={{ fontSize: 11, fontWeight: 900, color: "var(--gold)", fontFamily: "var(--condensed)" }}>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 900,
+                  color: "var(--gold)",
+                  fontFamily: "var(--condensed)",
+                }}
+              >
                 {initials}
               </span>
             )}
           </div>
-
-          {/* Name */}
-          <span style={{
-            fontSize: 12,
-            color: "var(--ink)",
-            fontFamily: "var(--condensed)",
-            fontWeight: 700,
-            letterSpacing: 0.3,
-            maxWidth: 120,
-            overflow: "hidden",
-            whiteSpace: "nowrap",
-            textOverflow: "ellipsis",
-          }}>
+          <span
+            style={{
+              fontSize: 12,
+              color: "var(--ink)",
+              fontFamily: "var(--condensed)",
+              fontWeight: 700,
+              letterSpacing: 0.3,
+              maxWidth: 120,
+              overflow: "hidden",
+              whiteSpace: "nowrap",
+              textOverflow: "ellipsis",
+            }}
+          >
             {displayName}
           </span>
         </div>
-
-        {/* Logout */}
         <button
           onClick={onLogout}
           style={{
@@ -105,38 +230,598 @@ export function Connect({
     );
   }
 
+  // --- Logged out view ---
   return (
-    <div style={{ display: "flex", gap: 8 }}>
-      {nip07Available && (
+    <>
+      <div style={{ display: "flex", gap: 6 }}>
+        {nip07Available && (
+          <button
+            onClick={onNip07}
+            style={{
+              background: "linear-gradient(135deg,var(--grass),var(--pitch))",
+              color: "#fff",
+              border: 0,
+              padding: "8px 14px",
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            {t.connect_ext}
+          </button>
+        )}
         <button
-          onClick={onNip07}
+          onClick={() => { setShowModal(true); setNcView("menu"); }}
           style={{
-            background: "linear-gradient(135deg,var(--grass),var(--pitch))",
-            color: "#fff",
-            border: 0,
+            background: "var(--panel)",
+            border: "1px solid rgba(140,82,255,0.6)",
+            color: "rgb(180,130,255)",
             padding: "8px 14px",
             borderRadius: 8,
             fontSize: 13,
             fontWeight: 700,
+            cursor: "pointer",
           }}
         >
-          {t.connect_ext}
+          📱 Nostr Connect
         </button>
+        <button
+          onClick={onLocal}
+          style={{
+            background: "var(--panel)",
+            border: "1px solid var(--gold)",
+            color: "var(--gold)",
+            padding: "8px 14px",
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          {t.connect_local}
+        </button>
+      </div>
+
+      {showModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 200,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+        >
+          {/* Backdrop */}
+          <div
+            onClick={closeModal}
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: "rgba(0,0,0,0.85)",
+              backdropFilter: "blur(8px)",
+            }}
+          />
+
+          {/* Modal box */}
+          <div
+            style={{
+              position: "relative",
+              width: "100%",
+              maxWidth: 400,
+              background: "var(--panel)",
+              border: "1px solid rgba(140,82,255,0.5)",
+              borderRadius: 16,
+              overflow: "hidden",
+              boxShadow: "0 24px 64px rgba(0,0,0,.7)",
+            }}
+          >
+            {/* Header */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "16px 20px",
+                borderBottom: "1px solid var(--line)",
+              }}
+            >
+              {ncView !== "menu" ? (
+                <button
+                  onClick={() => {
+                    abortRef.current?.abort();
+                    abortRef.current = null;
+                    setNcView("menu");
+                    setNcError(null);
+                    setAuthUrl(null);
+                    setQrUri(null);
+                    setQrDataUrl(null);
+                  }}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--muted)",
+                    cursor: "pointer",
+                    fontSize: 13,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                    padding: 0,
+                  }}
+                >
+                  ← Volver
+                </button>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 18 }}>🔐</span>
+                  <span
+                    style={{
+                      fontFamily: "var(--condensed)",
+                      fontWeight: 900,
+                      fontSize: 15,
+                      letterSpacing: 0.5,
+                      color: "var(--ink)",
+                    }}
+                  >
+                    NOSTR CONNECT
+                  </span>
+                </div>
+              )}
+              <button
+                onClick={closeModal}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--muted)",
+                  fontSize: 20,
+                  cursor: "pointer",
+                  lineHeight: 1,
+                  padding: 0,
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: "20px" }}>
+
+              {/* MENU VIEW */}
+              {ncView === "menu" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <p style={{ fontSize: 13, color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>
+                    Usá tu firmante Nostr desde el celular sin exponer tu clave privada.
+                    Compatible con <strong style={{ color: "var(--ink)" }}>Amber</strong> (Android),{" "}
+                    <strong style={{ color: "var(--ink)" }}>nsec.app</strong> y cualquier app NIP-46.
+                  </p>
+
+                  {/* QR button */}
+                  <button
+                    onClick={startQR}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 14,
+                      padding: "14px 16px",
+                      background: "rgba(140,82,255,0.08)",
+                      border: "1px solid rgba(140,82,255,0.4)",
+                      borderRadius: 12,
+                      cursor: "pointer",
+                      textAlign: "left",
+                      width: "100%",
+                    }}
+                  >
+                    <span style={{ fontSize: 28, lineHeight: 1 }}>📷</span>
+                    <div>
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 700,
+                          color: "rgb(200,160,255)",
+                          fontFamily: "var(--condensed)",
+                          letterSpacing: 0.5,
+                        }}
+                      >
+                        ESCANEAR QR
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+                        Abrí Amber o nsec.app y escaneá el código
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Bunker URL button */}
+                  <button
+                    onClick={() => setNcView("bunker")}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 14,
+                      padding: "14px 16px",
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid var(--line)",
+                      borderRadius: 12,
+                      cursor: "pointer",
+                      textAlign: "left",
+                      width: "100%",
+                    }}
+                  >
+                    <span style={{ fontSize: 28, lineHeight: 1 }}>🔗</span>
+                    <div>
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 700,
+                          color: "var(--ink)",
+                          fontFamily: "var(--condensed)",
+                          letterSpacing: 0.5,
+                        }}
+                      >
+                        URL BUNKER
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+                        Pegá tu bunker:// o NIP-05 (usuario@nsec.app)
+                      </div>
+                    </div>
+                  </button>
+
+                  <p style={{ fontSize: 11, color: "var(--muted)", textAlign: "center", margin: "4px 0 0" }}>
+                    NIP-46 · tu clave privada nunca sale de tu dispositivo
+                  </p>
+                </div>
+              )}
+
+              {/* QR VIEW */}
+              {ncView === "qr" && (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ink)", fontFamily: "var(--condensed)" }}>
+                      ESCANEÁ CON TU FIRMANTE
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
+                      Abrí Amber, nsec.app o cualquier firmante compatible
+                    </div>
+                  </div>
+
+                  {/* QR image */}
+                  <div
+                    style={{
+                      background: "#030b18",
+                      border: "2px solid rgba(140,82,255,0.4)",
+                      borderRadius: 12,
+                      padding: 8,
+                      width: 280,
+                      height: 280,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {qrDataUrl ? (
+                      <img src={qrDataUrl} alt="nostrconnect QR" width={264} height={264} />
+                    ) : (
+                      <div style={{ color: "var(--gold)", fontSize: 13 }}>Generando QR…</div>
+                    )}
+                  </div>
+
+                  {/* "Abrir en Amber" — solo visible en mobile (no hay detección CSS inline, lo mostramos siempre pero es útil solo en mobile) */}
+                  {qrUri && (
+                    <a
+                      href={qrUri}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                        width: "100%",
+                        padding: "12px 16px",
+                        background: "linear-gradient(135deg,rgba(140,82,255,0.3),rgba(80,40,180,0.3))",
+                        border: "1px solid rgba(140,82,255,0.5)",
+                        borderRadius: 10,
+                        color: "rgb(200,160,255)",
+                        fontWeight: 700,
+                        fontSize: 14,
+                        fontFamily: "var(--condensed)",
+                        letterSpacing: 0.5,
+                        textDecoration: "none",
+                      }}
+                    >
+                      📱 ABRIR EN AMBER
+                    </a>
+                  )}
+
+                  {/* Countdown + status */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 11 }}>
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 5,
+                        color: "rgb(100,220,200)",
+                        fontFamily: "var(--condensed)",
+                        fontWeight: 700,
+                        letterSpacing: 0.5,
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 7,
+                          height: 7,
+                          borderRadius: "50%",
+                          background: "rgb(100,220,200)",
+                          animation: "figus-ping 1.5s ease-in-out infinite",
+                          display: "inline-block",
+                        }}
+                      />
+                      ESPERANDO FIRMANTE…
+                    </span>
+                    {countdown && (
+                      <span style={{ color: "var(--muted)" }}>
+                        expira en{" "}
+                        <span
+                          style={{
+                            color: remainingMs !== null && remainingMs < 30_000 ? "#ff6b6b" : "var(--ink)",
+                            fontWeight: 700,
+                            fontVariantNumeric: "tabular-nums",
+                          }}
+                        >
+                          {countdown}
+                        </span>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Copy URI */}
+                  {qrUri && (
+                    <button
+                      onClick={copyUri}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        width: "100%",
+                        padding: "8px 12px",
+                        background: "rgba(255,255,255,0.03)",
+                        border: "1px solid var(--line)",
+                        borderRadius: 8,
+                        cursor: "pointer",
+                        gap: 8,
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontFamily: "monospace",
+                          fontSize: 10,
+                          color: "var(--muted)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {qrUri.slice(0, 60)}…
+                      </span>
+                      <span style={{ fontSize: 13, flexShrink: 0 }}>
+                        {copied ? "✅" : "📋"}
+                      </span>
+                    </button>
+                  )}
+
+                  {/* auth_url button */}
+                  {authUrl && (
+                    <a
+                      href={authUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        padding: "8px 14px",
+                        background: "rgba(140,82,255,0.12)",
+                        border: "1px solid rgba(140,82,255,0.4)",
+                        borderRadius: 8,
+                        color: "rgb(180,130,255)",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        textDecoration: "none",
+                      }}
+                    >
+                      Autorizar en el firmante →
+                    </a>
+                  )}
+
+                  {ncError && (
+                    <div
+                      style={{
+                        width: "100%",
+                        padding: "10px 14px",
+                        background: "rgba(255,80,80,0.1)",
+                        border: "1px solid rgba(255,80,80,0.3)",
+                        borderRadius: 8,
+                        fontSize: 12,
+                        color: "#ff9999",
+                      }}
+                    >
+                      {ncError}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* BUNKER URL VIEW */}
+              {ncView === "bunker" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ink)", fontFamily: "var(--condensed)" }}>
+                      CONECTÁ TU BUNKER
+                    </div>
+                    <p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0", lineHeight: 1.5 }}>
+                      Pegá la URL <code style={{ color: "rgb(100,220,200)" }}>bunker://</code> que te da tu
+                      firmante remoto, o un NIP-05 como{" "}
+                      <code style={{ color: "var(--muted)" }}>usuario@nsec.app</code>.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label
+                      style={{
+                        display: "block",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: "var(--muted)",
+                        fontFamily: "var(--condensed)",
+                        letterSpacing: 0.5,
+                        marginBottom: 6,
+                      }}
+                    >
+                      URL DEL BUNKER
+                    </label>
+                    <textarea
+                      value={bunkerUrl}
+                      onChange={(e) => setBunkerUrl(e.target.value)}
+                      placeholder="bunker://abc123...@relay.nsec.app?secret=xyz  o  usuario@nsec.app"
+                      rows={3}
+                      style={{
+                        width: "100%",
+                        padding: "10px 12px",
+                        background: "rgba(255,255,255,0.03)",
+                        border: "1px solid var(--line)",
+                        borderRadius: 10,
+                        color: "var(--ink)",
+                        fontSize: 12,
+                        fontFamily: "monospace",
+                        resize: "vertical",
+                        boxSizing: "border-box",
+                        outline: "none",
+                      }}
+                      onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(140,82,255,0.6)")}
+                      onBlur={(e) => (e.currentTarget.style.borderColor = "var(--line)")}
+                    />
+                  </div>
+
+                  {ncError && (
+                    <div
+                      style={{
+                        padding: "10px 14px",
+                        background: "rgba(255,80,80,0.1)",
+                        border: "1px solid rgba(255,80,80,0.3)",
+                        borderRadius: 8,
+                        fontSize: 12,
+                        color: "#ff9999",
+                      }}
+                    >
+                      {ncError}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={handleBunkerConnect}
+                    disabled={!bunkerUrl.trim()}
+                    style={{
+                      padding: "12px 16px",
+                      background: "linear-gradient(135deg,rgba(140,82,255,0.5),rgba(80,40,180,0.5))",
+                      border: "1px solid rgba(140,82,255,0.6)",
+                      borderRadius: 10,
+                      color: "rgb(220,190,255)",
+                      fontWeight: 900,
+                      fontSize: 14,
+                      fontFamily: "var(--condensed)",
+                      letterSpacing: 0.5,
+                      cursor: bunkerUrl.trim() ? "pointer" : "not-allowed",
+                      opacity: bunkerUrl.trim() ? 1 : 0.5,
+                    }}
+                  >
+                    CONECTAR →
+                  </button>
+
+                  <p style={{ fontSize: 11, color: "var(--muted)", textAlign: "center", margin: 0 }}>
+                    Compatible con Amber, nsec.app, nsecBunker y más
+                  </p>
+                </div>
+              )}
+
+              {/* CONNECTING VIEW */}
+              {ncView === "connecting" && (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 16,
+                    padding: "20px 0",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: "50%",
+                      border: "3px solid rgba(140,82,255,0.2)",
+                      borderTop: "3px solid rgba(140,82,255,0.9)",
+                      animation: "figus-spin 0.8s linear infinite",
+                    }}
+                  />
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ink)", fontFamily: "var(--condensed)" }}>
+                      CONECTANDO…
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
+                      Esperando confirmación de tu firmante remoto
+                    </div>
+                  </div>
+                  {authUrl && (
+                    <a
+                      href={authUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        padding: "8px 14px",
+                        background: "rgba(140,82,255,0.12)",
+                        border: "1px solid rgba(140,82,255,0.4)",
+                        borderRadius: 8,
+                        color: "rgb(180,130,255)",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        textDecoration: "none",
+                      }}
+                    >
+                      Autorizar en el firmante →
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer note */}
+            <div
+              style={{
+                padding: "12px 20px",
+                borderTop: "1px solid var(--line)",
+                background: "rgba(0,0,0,0.2)",
+                textAlign: "center",
+              }}
+            >
+              <span style={{ fontSize: 10, color: "var(--muted)", fontFamily: "var(--condensed)", letterSpacing: 0.5 }}>
+                NIP-46 · TU CLAVE PRIVADA NUNCA SALE DE TU DISPOSITIVO
+              </span>
+            </div>
+          </div>
+        </div>
       )}
-      <button
-        onClick={onLocal}
-        style={{
-          background: "var(--panel)",
-          border: "1px solid var(--gold)",
-          color: "var(--gold)",
-          padding: "8px 14px",
-          borderRadius: 8,
-          fontSize: 13,
-          fontWeight: 700,
-        }}
-      >
-        {t.connect_local}
-      </button>
-    </div>
+
+      <style>{`
+        @keyframes figus-spin { to { transform: rotate(360deg); } }
+        @keyframes figus-ping {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.4; transform: scale(1.4); }
+        }
+      `}</style>
+    </>
   );
 }
