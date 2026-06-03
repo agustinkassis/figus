@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { CATALOG, RARITY_META, TEAMS } from "@/lib/catalog";
 import type { Listing, Ownership, Settlement } from "@/lib/types";
 import { useLang } from "@/contexts/LangContext";
+import { Flag } from "./Flag";
 import { Traders } from "./Traders";
 import { StickerFace } from "./StickerCard";
 
@@ -24,8 +26,16 @@ export function Market({
 }) {
   const { t } = useLang();
   const [view, setView] = useState<"listings" | "traders">("listings");
+  const [zoomed, setZoomed] = useState<Listing | null>(null);
   const mine  = listings.filter((l) => l.seller === myPubkey);
   const others = listings.filter((l) => l.seller !== myPubkey);
+
+  useEffect(() => {
+    if (!zoomed) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setZoomed(null); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [zoomed]);
 
   return (
     <div className="fade-in">
@@ -126,6 +136,7 @@ export function Market({
               return (
                 <div
                   key={l.id}
+                  onClick={() => setZoomed(l)}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -134,6 +145,7 @@ export function Market({
                     border: "1px solid var(--line)",
                     borderRadius: 12,
                     padding: 12,
+                    cursor: "pointer",
                   }}
                 >
                   <div
@@ -159,7 +171,7 @@ export function Market({
                     </div>
                   </div>
                   <button
-                    onClick={() => onBuy(l)}
+                    onClick={(e) => { e.stopPropagation(); onBuy(l); }}
                     style={{
                       background: "linear-gradient(135deg,var(--grass),var(--pitch))",
                       color: "#fff",
@@ -205,6 +217,128 @@ export function Market({
       {view === "traders" && (
         <Traders myOwnership={myOwnership} myPubkey={myPubkey} />
       )}
+
+      {/* ── ZOOM OVERLAY ── */}
+      {zoomed && typeof document !== "undefined" && createPortal(
+        <ListingZoom listing={zoomed} onClose={() => setZoomed(null)} onBuy={onBuy} />,
+        document.body
+      )}
+    </div>
+  );
+}
+
+function ListingZoom({
+  listing,
+  onClose,
+  onBuy,
+}: {
+  listing: Listing;
+  onClose: () => void;
+  onBuy: (l: Listing) => void;
+}) {
+  const s = CATALOG[listing.stickerNum];
+  const r = RARITY_META[s.rarity];
+  const team = TEAMS[s.team];
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0,
+        background: "rgba(3,11,24,.88)",
+        backdropFilter: "blur(10px)",
+        display: "grid", placeItems: "center",
+        zIndex: 60, padding: 20,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          display: "flex", flexDirection: "column",
+          alignItems: "center", gap: 16,
+          maxWidth: 340, width: "100%",
+        }}
+      >
+        {/* Figurita grande */}
+        <div style={{
+          width: 240, height: 320, borderRadius: 14,
+          border: `3px solid ${r.ring}`, overflow: "hidden",
+          boxShadow: `0 0 40px ${r.glow}, 0 24px 60px rgba(0,0,0,.7)`,
+          animation: "pop .22s cubic-bezier(.34,1.56,.64,1) both",
+        }}>
+          <StickerFace num={listing.stickerNum} />
+        </div>
+
+        {/* Info + comprar */}
+        <div style={{
+          background: "var(--panel)", border: "1px solid var(--line)",
+          borderRadius: 14, padding: "14px 18px",
+          width: "100%", textAlign: "center",
+          animation: "popIn .22s cubic-bezier(.34,1.56,.64,1) both",
+        }}>
+          <div style={{
+            fontFamily: "var(--condensed)", fontWeight: 900,
+            fontSize: 18, color: "var(--ink)", lineHeight: 1.1, marginBottom: 4,
+          }}>
+            <Flag team={s.team} height={22} style={{ borderRadius: 3, marginRight: 6 }} />
+            {s.name}
+          </div>
+
+          <div style={{
+            fontSize: 12, color: "var(--muted)", fontFamily: "var(--condensed)",
+            fontWeight: 700, marginBottom: 10,
+          }}>
+            {team.name.toUpperCase()} · #{listing.stickerNum}
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 14 }}>
+            <span style={{
+              background: r.ring, color: "#000",
+              fontSize: 10, fontWeight: 900,
+              padding: "3px 10px", borderRadius: 99,
+              fontFamily: "var(--condensed)", letterSpacing: 0.5,
+            }}>
+              {r.label.toUpperCase()}
+            </span>
+            <span style={{
+              background: "var(--panel2)", color: "var(--muted)",
+              fontSize: 10, fontWeight: 900,
+              padding: "3px 10px", borderRadius: 99,
+              fontFamily: "var(--condensed)", letterSpacing: 0.3,
+            }}>
+              vendedor: {listing.seller.slice(0, 10)}…
+            </span>
+          </div>
+
+          <button
+            onClick={() => { onBuy(listing); onClose(); }}
+            style={{
+              width: "100%",
+              background: "linear-gradient(135deg,var(--grass),var(--pitch))",
+              color: "#fff", border: 0,
+              padding: "12px 0", borderRadius: 10,
+              fontWeight: 900, fontSize: 15,
+              fontFamily: "var(--condensed)", letterSpacing: 0.5,
+              cursor: "pointer", marginBottom: 8,
+            }}
+          >
+            ⚡ COMPRAR · {listing.price} sats
+          </button>
+
+          <button
+            onClick={onClose}
+            style={{
+              width: "100%", background: "var(--panel2)",
+              border: "1px solid var(--line)", color: "var(--muted)",
+              padding: "8px 0", borderRadius: 8,
+              fontSize: 11, fontWeight: 700, fontFamily: "var(--condensed)",
+              cursor: "pointer", letterSpacing: 0.5,
+            }}
+          >
+            CERRAR
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -349,6 +349,31 @@ function SquadImage({ team, light }: { team: string; light: boolean }) {
   );
 }
 
+// ─── Shield image with fallback ───────────────────────────────────────────────
+// Tries: /shield-{team}.png → SVG silhouette
+
+function ShieldImage({ team, light }: { team: string; light: boolean }) {
+  const [useSvg, setUseSvg] = useState(false);
+
+  if (useSvg) return <Silhouette type="shield" light={light} />;
+
+  return (
+    <img
+      src={`/shield-${team}.png`}
+      alt=""
+      onError={() => setUseSvg(true)}
+      style={{
+        width: "100%", height: "100%",
+        objectFit: "contain",
+        padding: "12%",
+        boxSizing: "border-box",
+        display: "block",
+        filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.35))",
+      }}
+    />
+  );
+}
+
 // ─── StickerFace (main export used by Album + PackReveal) ─────────────────────
 
 export function StickerFace({
@@ -378,8 +403,8 @@ export function StickerFace({
   const nameColor = light ? "#111" : "#fff";
   const muteColor = light ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.65)";
 
-  // SVG-only types (everything else shows an ostrich image)
-  const isSVGType = ["shield", "squad", "trophy", "stadium", "ball", "globe", "logo", "mascot", "emblem"].includes(sType);
+  // SVG-only types (shield has its own image component with SVG fallback)
+  const isSVGType = ["squad", "trophy", "stadium", "ball", "globe", "logo", "mascot", "emblem"].includes(sType);
   // For champion stickers, load ostrich from the mapped country
   const ostrichTeam = sType === "champion" ? (championCode ?? s.team) : s.team;
 
@@ -424,6 +449,8 @@ export function StickerFace({
         <div style={{ position: "absolute", top: 2, left: 4, right: 4, bottom: compact ? 14 : 18, zIndex: 1, overflow: "hidden", borderRadius: 2 }}>
           {sType === "squad" ? (
             <SquadImage team={s.team} light={light} />
+          ) : sType === "shield" ? (
+            <ShieldImage team={s.team} light={light} />
           ) : hasFwcImage ? (
             <img
               src={`/fwc-${num}.png`}
