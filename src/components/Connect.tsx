@@ -259,14 +259,15 @@ export function Connect({
               border-radius: 16px;
               display: flex; flex-direction: column;
               max-height: 90vh;
+              overflow: hidden;
               box-shadow: 0 24px 64px rgba(0,0,0,.7);
               animation: nc-slide-up .22s ease;
             }
             .nc-modal-body {
               overflow-y: auto;
               flex: 1;
+              min-height: 0;
               padding: 20px;
-              /* iOS momentum scroll */
               -webkit-overflow-scrolling: touch;
             }
             /* Mobile: bottom sheet */
@@ -279,9 +280,10 @@ export function Connect({
                 max-width: 100%;
                 border-radius: 20px 20px 0 0;
                 border-bottom: none;
-                max-height: 88vh;
-                /* iOS safe area */
-                padding-bottom: env(safe-area-inset-bottom);
+                max-height: 92vh;
+              }
+              .nc-modal-body {
+                padding-bottom: calc(20px + env(safe-area-inset-bottom));
               }
             }
           `}</style>
