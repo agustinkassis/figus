@@ -202,7 +202,7 @@ function HomeInner() {
     try {
       const res = await zap(
         {
-          amountSats: 100,
+          amountSats: 21,
           target: { pubkey: ISSUER_PUBKEY, lnurlOrAddress: ISSUER_LN_ADDRESS },
           extraTags: [
             ["a", addr(KIND.PACK, ISSUER_PUBKEY, "pack-basico")],

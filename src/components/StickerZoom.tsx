@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { CATALOG, RARITY_META, TEAMS, suggestedPrice } from "@/lib/catalog";
 import { Flag } from "./Flag";
 import { useLang } from "@/contexts/LangContext";
@@ -24,6 +24,8 @@ export function StickerZoom({
   const team   = TEAMS[s.team];
   const count  = ownership[num] ?? 0;
   const extras = count - 1;
+  const [sellPrice, setSellPrice] = useState(String(suggestedPrice(num)));
+  const [selling,   setSelling]   = useState(false);
 
   // Cerrar con Escape
   useEffect(() => {
@@ -136,27 +138,101 @@ export function StickerZoom({
             )}
           </div>
 
-          {/* Botón vender si hay repetidas */}
+          {/* Vender repetida */}
           {extras > 0 && onSell && (
-            <button
-              onClick={() => { onSell(num, suggestedPrice(num)); onClose(); }}
-              style={{
-                width: "100%",
-                background: "transparent",
-                border: "1px solid var(--gold)",
-                color: "var(--gold)",
-                padding: "9px 0",
-                borderRadius: 8,
-                fontSize: 12,
-                fontWeight: 900,
-                fontFamily: "var(--condensed)",
-                letterSpacing: 0.5,
-                cursor: "pointer",
-                marginBottom: 8,
-              }}
-            >
-              {t.zoom_sell} · {suggestedPrice(num)} sats
-            </button>
+            selling ? (
+              <div style={{ marginBottom: 8 }}>
+                <div style={{
+                  fontSize: 10, color: "var(--muted)", fontFamily: "var(--condensed)",
+                  fontWeight: 700, letterSpacing: 0.5, marginBottom: 5, textAlign: "left",
+                }}>
+                  PRECIO (sats)
+                </div>
+                <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                  <input
+                    autoFocus
+                    type="number"
+                    min={1}
+                    value={sellPrice}
+                    onChange={(e) => setSellPrice(e.target.value)}
+                    style={{
+                      flex: 1,
+                      padding: "8px 10px",
+                      background: "rgba(255,255,255,0.05)",
+                      border: "1px solid var(--gold)",
+                      borderRadius: 8,
+                      color: "var(--gold)",
+                      fontSize: 15,
+                      fontFamily: "var(--condensed)",
+                      fontWeight: 700,
+                      outline: "none",
+                      textAlign: "center",
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        onSell(num, Number(sellPrice) || suggestedPrice(num));
+                        onClose();
+                      }
+                      if (e.key === "Escape") setSelling(false);
+                    }}
+                  />
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button
+                    onClick={() => { onSell(num, Number(sellPrice) || suggestedPrice(num)); onClose(); }}
+                    style={{
+                      flex: 1,
+                      background: "var(--gold)",
+                      border: "none",
+                      color: "#030b18",
+                      padding: "9px 0",
+                      borderRadius: 8,
+                      fontSize: 12,
+                      fontWeight: 900,
+                      fontFamily: "var(--condensed)",
+                      letterSpacing: 0.5,
+                      cursor: "pointer",
+                    }}
+                  >
+                    ⚡ PUBLICAR
+                  </button>
+                  <button
+                    onClick={() => setSelling(false)}
+                    style={{
+                      background: "transparent",
+                      border: "1px solid var(--line)",
+                      color: "var(--muted)",
+                      padding: "9px 12px",
+                      borderRadius: 8,
+                      fontSize: 12,
+                      cursor: "pointer",
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setSelling(true)}
+                style={{
+                  width: "100%",
+                  background: "transparent",
+                  border: "1px solid var(--gold)",
+                  color: "var(--gold)",
+                  padding: "9px 0",
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontWeight: 900,
+                  fontFamily: "var(--condensed)",
+                  letterSpacing: 0.5,
+                  cursor: "pointer",
+                  marginBottom: 8,
+                }}
+              >
+                {t.zoom_sell} · {suggestedPrice(num)} sats sugerido
+              </button>
+            )
           )}
 
           {/* Cerrar */}

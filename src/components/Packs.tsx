@@ -198,7 +198,7 @@ export function Packs({
           marginBottom: 4,
         }}
       >
-        100 sats
+        21 sats
       </div>
       <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 18 }}>
         {t.pack_lightning}

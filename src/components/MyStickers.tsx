@@ -15,8 +15,10 @@ export function MyStickers({
   onSell: (num: number, price: number) => void;
 }) {
   const { t } = useLang();
-  const [filter,     setFilter]     = useState<"dupes" | "all">("dupes");
-  const [zoomedNum,  setZoomedNum]  = useState<number | null>(null);
+  const [filter,      setFilter]     = useState<"dupes" | "all">("dupes");
+  const [zoomedNum,   setZoomedNum]  = useState<number | null>(null);
+  const [sellingNum,  setSellingNum] = useState<number | null>(null);
+  const [sellPrice,   setSellPrice]  = useState("");
 
   const ownedNums = ALL_NUMBERS.filter((n) => (ownership[n] ?? 0) > 0);
   const dupeNums  = ALL_NUMBERS.filter((n) => (ownership[n] ?? 0) > 1);
@@ -130,27 +132,101 @@ export function MyStickers({
                   </div>
                 )}
 
-                {/* Sell button for duplicates */}
+                {/* Sell button / price editor for duplicates */}
                 {extras > 0 && (
-                  <button
-                    onClick={() => onSell(n, suggestedPrice(n))}
-                    style={{
-                      width: "100%",
-                      marginTop: 5,
-                      background: "transparent",
-                      border: "1px solid var(--gold)",
-                      color: "var(--gold)",
-                      padding: "4px 0",
-                      borderRadius: 6,
-                      fontSize: 9,
-                      fontWeight: 900,
-                      fontFamily: "var(--condensed)",
-                      letterSpacing: 0.3,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {t.my_sell}
-                  </button>
+                  sellingNum === n ? (
+                    <div style={{ marginTop: 5, display: "flex", flexDirection: "column", gap: 3 }}>
+                      <input
+                        autoFocus
+                        type="number"
+                        min={1}
+                        value={sellPrice}
+                        onChange={(e) => setSellPrice(e.target.value)}
+                        placeholder={String(suggestedPrice(n))}
+                        style={{
+                          width: "100%",
+                          padding: "3px 6px",
+                          background: "rgba(255,255,255,0.06)",
+                          border: "1px solid var(--gold)",
+                          borderRadius: 5,
+                          color: "var(--gold)",
+                          fontSize: 10,
+                          fontFamily: "var(--condensed)",
+                          fontWeight: 700,
+                          boxSizing: "border-box",
+                          textAlign: "center",
+                          outline: "none",
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            const p = Number(sellPrice) || suggestedPrice(n);
+                            onSell(n, p);
+                            setSellingNum(null);
+                            setSellPrice("");
+                          }
+                          if (e.key === "Escape") { setSellingNum(null); setSellPrice(""); }
+                        }}
+                      />
+                      <div style={{ display: "flex", gap: 3 }}>
+                        <button
+                          onClick={() => {
+                            const p = Number(sellPrice) || suggestedPrice(n);
+                            onSell(n, p);
+                            setSellingNum(null);
+                            setSellPrice("");
+                          }}
+                          style={{
+                            flex: 1,
+                            background: "var(--gold)",
+                            border: "none",
+                            color: "#030b18",
+                            padding: "3px 0",
+                            borderRadius: 5,
+                            fontSize: 9,
+                            fontWeight: 900,
+                            fontFamily: "var(--condensed)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          ✓
+                        </button>
+                        <button
+                          onClick={() => { setSellingNum(null); setSellPrice(""); }}
+                          style={{
+                            background: "transparent",
+                            border: "1px solid var(--line)",
+                            color: "var(--muted)",
+                            padding: "3px 5px",
+                            borderRadius: 5,
+                            fontSize: 9,
+                            cursor: "pointer",
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => { setSellingNum(n); setSellPrice(String(suggestedPrice(n))); }}
+                      style={{
+                        width: "100%",
+                        marginTop: 5,
+                        background: "transparent",
+                        border: "1px solid var(--gold)",
+                        color: "var(--gold)",
+                        padding: "4px 0",
+                        borderRadius: 6,
+                        fontSize: 9,
+                        fontWeight: 900,
+                        fontFamily: "var(--condensed)",
+                        letterSpacing: 0.3,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {t.my_sell}
+                    </button>
+                  )
                 )}
               </div>
             );
