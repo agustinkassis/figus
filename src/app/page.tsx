@@ -357,16 +357,8 @@ function HomeInner() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {/* Hexagonal emblem */}
-          <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-            <polygon
-              points="20,2 36,11 36,29 20,38 4,29 4,11"
-              fill="#003087"
-              stroke="rgba(232,185,35,0.7)"
-              strokeWidth="1.5"
-            />
-            <text x="20" y="25" textAnchor="middle" fontSize="14" fontWeight="bold" fill="#e8b923" fontFamily="sans-serif">26</text>
-          </svg>
+          {/* Logo */}
+          <img src="/logomundial.png" alt="Figus Mundial 2026" width={40} height={40} style={{ objectFit: "contain" }} />
           <div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
               <span style={{ fontFamily: "var(--display)", fontSize: 20, lineHeight: 1, color: "var(--gold)" }}>

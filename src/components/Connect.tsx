@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import type { Identity } from "@/lib/identity";
 import { useProfile } from "@/hooks/useProfile";
 import { useLang } from "@/contexts/LangContext";
@@ -44,6 +45,10 @@ export function Connect({
   const [authUrl, setAuthUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  // Mount flag for portal (SSR safe)
+  useEffect(() => { setMounted(true); }, []);
 
   // Countdown timer
   useEffect(() => {
@@ -233,7 +238,7 @@ export function Connect({
         </button>
       </div>
 
-      {showModal && (
+      {showModal && mounted && createPortal(
         <>
           {/* ── CSS for responsive modal ── */}
           <style>{`
@@ -689,7 +694,8 @@ export function Connect({
               </div>
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </>
   );

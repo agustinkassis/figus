@@ -14,7 +14,7 @@ function teamPos(num: number): number | null {
 function silhouetteType(num: number): string {
   if (num <= 20) {
     const name = CATALOG[num].name.toLowerCase();
-    if (name.includes("logo") || name.includes("panini")) return "logo";
+    if (name.includes("logo") || name.includes("figu")) return "logo";
     if (name.includes("mascota"))                         return "mascot";
     if (name.includes("trofeo"))                          return "trophy";
     if (name.includes("est."))                            return "stadium";

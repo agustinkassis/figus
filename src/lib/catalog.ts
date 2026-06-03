@@ -108,7 +108,7 @@ const TEAM_PLAYERS: Record<string, string[]> = {
 
 // ─── FWC intro stickers (20 total, global nums 1-20) ─────────────────────────
 const FWC_NAMES: string[] = [
-  "Logo Panini",         //  1
+  "Logo Figu",         //  1
   "Mascota oficial",     //  2
   "Trofeo FIFA",         //  3
   "Est. MetLife (USA)",  //  4
