@@ -1,0 +1,32 @@
+{
+  "name": "figus",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Álbum de figuritas del Mundial nativo de Nostr + Lightning — Hackatón ZAPS La Crypta",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "issuer": "tsx watch issuer/index.ts",
+    "seed": "tsx issuer/seed.ts"
+  },
+  "dependencies": {
+    "next": "14.2.5",
+    "nostr-tools": "^2.7.2",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@types/ws": "^8.18.1",
+    "dotenv": "^16.4.5",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.3",
+    "ws": "^8.21.0"
+  }
+}

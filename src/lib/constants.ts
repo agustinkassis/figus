@@ -1,0 +1,30 @@
+// Kinds custom del juego (ver docs/figus-modelo-datos-nostr.md)
+export const KIND = {
+  ALBUM: 30050, // addressable · issuer · definición del álbum
+  STICKER: 30051, // addressable · issuer · plantilla de figurita
+  PACK: 30052, // addressable · issuer · definición de sobre
+  OWNERSHIP: 30100, // addressable · issuer · propiedad vigente
+  GRANT: 1573, // regular · issuer · figus entregadas al abrir sobre
+  LISTING: 30200, // addressable · usuario · oferta de venta
+  SETTLEMENT: 1574, // regular · issuer · transferencia P2P confirmada
+  CLAIM: 1575, // regular · issuer · premio con zap split
+  FREE_PACK_CLAIM: 30110, // addressable · usuario · prueba de que ya reclamó su sobre gratis
+  PENALTY_PLAY: 30300, // addressable · usuario · resultado de penal (d = "penalty:YYYY-MM-DD")
+  ZAP_REQUEST: 9734, // NIP-57
+  ZAP_RECEIPT: 9735, // NIP-57
+} as const;
+
+export const ALBUM_ID = process.env.NEXT_PUBLIC_ALBUM_ID || "mundial-2026";
+
+export const ISSUER_PUBKEY = process.env.NEXT_PUBLIC_ISSUER_PUBKEY || "";
+
+export const RELAYS = (process.env.NEXT_PUBLIC_RELAYS ||
+  "wss://relay.damus.io,wss://nos.lol,wss://relay.nostr.band")
+  .split(",")
+  .map((r) => r.trim())
+  .filter(Boolean);
+
+// Helper para construir el coordinate "a" de un evento addressable
+export function addr(kind: number, pubkey: string, d: string): string {
+  return `${kind}:${pubkey}:${d}`;
+}
