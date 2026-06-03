@@ -2,6 +2,7 @@ import {
   generateSecretKey,
   getPublicKey,
   finalizeEvent,
+  nip19,
   type EventTemplate,
   type Event,
 } from "nostr-tools";
@@ -66,6 +67,34 @@ export function loginLocal(): Identity {
 export function logoutLocal() {
   localStorage.removeItem(LS_SK);
   localStorage.removeItem(LS_MODE);
+}
+
+/** Importa una clave privada nsec1… o hex. Reemplaza la clave local actual. */
+export function importLocalNsec(raw: string): Identity {
+  let sk: Uint8Array;
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("nsec")) {
+    const decoded = nip19.decode(trimmed);
+    if (decoded.type !== "nsec") throw new Error("No es una nsec válida");
+    sk = decoded.data as Uint8Array;
+  } else {
+    if (!/^[0-9a-fA-F]{64}$/.test(trimmed)) throw new Error("Clave inválida");
+    sk = Uint8Array.from(Buffer.from(trimmed, "hex"));
+  }
+  localStorage.setItem(LS_SK, Buffer.from(sk).toString("hex"));
+  localStorage.setItem(LS_MODE, "local");
+  return { pubkey: getPublicKey(sk), mode: "local" };
+}
+
+/** Devuelve la nsec y npub del usuario local en formato nip19. */
+export function getLocalKeys(): { nsec: string; npub: string } | null {
+  const hex = localStorage.getItem(LS_SK);
+  if (!hex) return null;
+  const sk = Uint8Array.from(Buffer.from(hex, "hex"));
+  return {
+    nsec: nip19.nsecEncode(sk),
+    npub: nip19.npubEncode(getPublicKey(sk)),
+  };
 }
 
 function clearNip46Session() {

@@ -5,6 +5,7 @@ import { CATALOG, RARITY_META, TEAMS, suggestedPrice } from "@/lib/catalog";
 import type { Listing, Ownership, Settlement } from "@/lib/types";
 import { useLang } from "@/contexts/LangContext";
 import { Traders } from "./Traders";
+import { StickerFace } from "./StickerCard";
 
 export function Market({
   listings,
@@ -120,20 +121,16 @@ export function Market({
                 >
                   <div
                     style={{
-                      width: 48,
-                      height: 60,
+                      width: 56,
+                      height: 74,
                       borderRadius: 8,
                       border: `2px solid ${r.ring}`,
-                      display: "grid",
-                      placeItems: "center",
-                      fontFamily: "var(--display)",
-                      fontSize: 14,
-                      color: "#fff",
+                      overflow: "hidden",
                       flexShrink: 0,
-                      background: `linear-gradient(150deg, ${team.color}, ${team.accent})`,
+                      boxShadow: `0 0 8px ${r.glow}44`,
                     }}
                   >
-                    #{l.stickerNum}
+                    <StickerFace num={l.stickerNum} compact />
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 700 }}>{s.name}</div>

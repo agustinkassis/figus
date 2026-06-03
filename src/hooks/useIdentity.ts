@@ -11,6 +11,7 @@ import {
   logoutLocal,
   clearPersistedMode,
   getPersistedMode,
+  importLocalNsec,
   type Identity,
 } from "@/lib/identity";
 
@@ -91,6 +92,11 @@ export function useIdentity() {
     setIdentity(null);
   }, [identity]);
 
+  const importNsec = useCallback((raw: string) => {
+    const id = importLocalNsec(raw);
+    setIdentity(id);
+  }, []);
+
   return {
     identity,
     nip07Available,
@@ -99,5 +105,6 @@ export function useIdentity() {
     connectNip46Bunker,
     connectNip46QR,
     logout,
+    importNsec,
   };
 }

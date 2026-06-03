@@ -37,7 +37,7 @@ export default function Home() {
 
 function HomeInner() {
   const { t, lang, toggle: toggleLang } = useLang();
-  const { identity, nip07Available, connectNip07, connectLocal, connectNip46QR, connectNip46Bunker, logout } =
+  const { identity, nip07Available, connectNip07, connectLocal, connectNip46QR, connectNip46Bunker, logout, importNsec } =
     useIdentity();
   const pubkey = identity?.pubkey ?? null;
   const { ownership, listings, settlements, owned, dupes, loading, refresh, hasClaimedFreePack } =
@@ -598,7 +598,11 @@ function HomeInner() {
       )}
 
       {showSettings && (
-        <SettingsModal onClose={() => setShowSettings(false)} />
+        <SettingsModal
+          onClose={() => setShowSettings(false)}
+          identity={identity}
+          onImportNsec={(raw) => { importNsec(raw); setShowSettings(false); }}
+        />
       )}
 
       {toast && (
