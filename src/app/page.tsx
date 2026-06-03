@@ -293,6 +293,31 @@ function HomeInner() {
     }
   }
 
+  // --- cancelar venta: republica el listing con status "closed" ---
+  async function cancelListing(listing: Listing) {
+    if (!identity) return;
+    const template: EventTemplate = {
+      kind: KIND.LISTING,
+      created_at: Math.floor(Date.now() / 1000),
+      content: "",
+      tags: [
+        ["d", listing.d],
+        ["sticker", `${ALBUM_ID}:${listing.stickerNum}`],
+        ["price", String(listing.price)],
+        ["status", "closed"],
+        ["p", ISSUER_PUBKEY],
+      ],
+    };
+    try {
+      const ev = await signEvent(template, identity.mode);
+      await Promise.any(getPool().publish(getRelays(), ev));
+      notify(`✅ Oferta cancelada`);
+      setTimeout(refresh, 800);
+    } catch {
+      notify("⚠️ No se pudo cancelar la oferta");
+    }
+  }
+
   // --- comprar: zap directo al vendedor ---
   async function buyListing(listing: Listing) {
     if (!identity) return notify("Conectate primero");
@@ -575,11 +600,10 @@ function HomeInner() {
           <Market
             listings={listings}
             settlements={settlements}
-            myDupes={dupesList}
             myOwnership={ownership}
             myPubkey={pubkey}
-            onList={listForSale}
             onBuy={buyListing}
+            onCancel={cancelListing}
           />
         )}
       </main>

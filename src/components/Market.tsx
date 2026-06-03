@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CATALOG, RARITY_META, TEAMS, suggestedPrice } from "@/lib/catalog";
+import { CATALOG, RARITY_META, TEAMS } from "@/lib/catalog";
 import type { Listing, Ownership, Settlement } from "@/lib/types";
 import { useLang } from "@/contexts/LangContext";
 import { Traders } from "./Traders";
@@ -10,22 +10,21 @@ import { StickerFace } from "./StickerCard";
 export function Market({
   listings,
   settlements,
-  myDupes,
   myOwnership,
   myPubkey,
-  onList,
   onBuy,
+  onCancel,
 }: {
   listings: Listing[];
   settlements: Settlement[];
-  myDupes: number[];
   myOwnership: Ownership;
   myPubkey: string | null;
-  onList: (num: number, price: number) => void;
   onBuy: (listing: Listing) => void;
+  onCancel: (listing: Listing) => void;
 }) {
   const { t } = useLang();
   const [view, setView] = useState<"listings" | "traders">("listings");
+  const mine  = listings.filter((l) => l.seller === myPubkey);
   const others = listings.filter((l) => l.seller !== myPubkey);
 
   return (
@@ -64,36 +63,54 @@ export function Market({
       {/* ── COMPRAR/VENDER ── */}
       {view === "listings" && (
         <>
-          {myDupes.length > 0 && (
-            <div
-              style={{
-                background: "var(--panel)",
-                border: "1px solid var(--line)",
-                borderRadius: 12,
-                padding: 14,
-                marginBottom: 18,
-              }}
-            >
-              <strong style={{ fontSize: 13 }}>{t.market_your_dupes}</strong>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-                {myDupes.map((n) => (
-                  <button
-                    key={n}
-                    onClick={() => onList(n, suggestedPrice(n))}
-                    style={{
-                      background: "#0d1117",
-                      border: "1px solid var(--gold)",
-                      color: "var(--gold)",
-                      padding: "6px 10px",
-                      borderRadius: 8,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
-                  >
-                    #{n} {CATALOG[n].name} · {t.market_sell}
-                  </button>
-                ))}
+          {/* Mis ventas activas */}
+          {mine.length > 0 && (
+            <div style={{ marginBottom: 18 }}>
+              <div style={{
+                fontSize: 10, color: "var(--muted)", fontFamily: "var(--condensed)",
+                fontWeight: 900, letterSpacing: 1.5, marginBottom: 10,
+              }}>
+                MIS VENTAS ACTIVAS
+              </div>
+              <div style={{ display: "grid", gap: 8 }}>
+                {mine.map((l) => {
+                  const s = CATALOG[l.stickerNum];
+                  const r = RARITY_META[s.rarity];
+                  return (
+                    <div key={l.id} style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      background: "rgba(232,185,35,0.06)",
+                      border: "1px solid rgba(232,185,35,0.25)",
+                      borderRadius: 12, padding: 10,
+                    }}>
+                      <div style={{
+                        width: 44, height: 58, borderRadius: 7,
+                        border: `2px solid ${r.ring}`, overflow: "hidden", flexShrink: 0,
+                      }}>
+                        <StickerFace num={l.stickerNum} compact />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: "var(--ink)" }}>{s.name}</div>
+                        <div style={{ fontSize: 11, color: "var(--gold)", fontFamily: "var(--condensed)", fontWeight: 700 }}>
+                          ⚡ {l.price} sats
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => onCancel(l)}
+                        style={{
+                          background: "transparent",
+                          border: "1px solid rgba(255,80,80,0.4)",
+                          color: "rgba(255,120,120,0.9)",
+                          padding: "7px 12px", borderRadius: 8,
+                          fontSize: 11, fontFamily: "var(--condensed)", fontWeight: 900,
+                          cursor: "pointer", flexShrink: 0, letterSpacing: 0.3,
+                        }}
+                      >
+                        CANCELAR
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
