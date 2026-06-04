@@ -12,6 +12,8 @@ import { MyStickers } from "@/components/MyStickers";
 import { Fixture } from "@/components/Fixture";
 import { PenaltyGame } from "@/components/PenaltyGame";
 import { Leaderboard } from "@/components/Leaderboard";
+import { PenaltyMatchLobby, PenaltyMatchView } from "@/components/PenaltyMatch";
+import type { PenaltyMatch } from "@/lib/penalty";
 import { ALL_NUMBERS, rollSticker } from "@/lib/catalog";
 import { ISSUER_PUBKEY, KIND, ALBUM_ID, addr } from "@/lib/constants";
 import { zap } from "@/lib/zap";
@@ -49,6 +51,7 @@ function HomeInner() {
   const [busy, setBusy] = useState(false);
   const [invoice, setInvoice] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [activeMatch, setActiveMatch] = useState<PenaltyMatch | null>(null);
 
   const notify = (m: string) => {
     setToast(m);
@@ -588,12 +591,28 @@ function HomeInner() {
         {tab === "fixture" && <Fixture />}
         {tab === "game" && (
           <div style={{ display: "grid", gap: 28 }}>
-            <PenaltyGame
-              pubkey={pubkey}
-              onGoal={openFreePack}
-              onPublish={publishPenalty}
-            />
-            <Leaderboard myPubkey={pubkey} />
+            {activeMatch && identity ? (
+              <PenaltyMatchView
+                match={activeMatch}
+                identity={identity}
+                onBack={() => setActiveMatch(null)}
+              />
+            ) : (
+              <>
+                <PenaltyGame
+                  pubkey={pubkey}
+                  onGoal={openFreePack}
+                  onPublish={publishPenalty}
+                />
+                <div style={{ borderTop: "1px solid var(--line)", paddingTop: 24 }}>
+                  <PenaltyMatchLobby
+                    identity={identity}
+                    onEnterMatch={setActiveMatch}
+                  />
+                </div>
+                <Leaderboard myPubkey={pubkey} />
+              </>
+            )}
           </div>
         )}
         {tab === "market" && (

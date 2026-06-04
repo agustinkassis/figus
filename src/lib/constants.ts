@@ -9,7 +9,11 @@ export const KIND = {
   SETTLEMENT: 1574, // regular · issuer · transferencia P2P confirmada
   CLAIM: 1575, // regular · issuer · premio con zap split
   FREE_PACK_CLAIM: 30110, // addressable · usuario · prueba de que ya reclamó su sobre gratis
-  PENALTY_PLAY: 30300, // addressable · usuario · resultado de penal (d = "penalty:YYYY-MM-DD")
+  PENALTY_PLAY:   30300, // addressable · usuario · resultado de penal (d = "penalty:YYYY-MM-DD")
+  PENALTY_MATCH:  30301, // addressable · desafiante · partida PvP (d = "pmatch:{pk8}:{ts}")
+  PENALTY_COMMIT: 1576,  // regular · pateador · compromiso de zona (hash)
+  PENALTY_BLOCK:  1577,  // regular · arquero · elección de columna
+  PENALTY_REVEAL: 1578,  // regular · pateador · revelación zona + nonce
   ZAP_REQUEST: 9734, // NIP-57
   ZAP_RECEIPT: 9735, // NIP-57
 } as const;

@@ -1,31 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import {
+  COLUMN_ZONES,
+  ZONE_POS,
+  KEEPER_LEFT,
+  ARROWS,
+  resolveKick,
+  todayKey,
+} from "@/lib/penalty";
 
 type Phase = "aim" | "diving" | "result";
-
-// Zones each keeper column covers (3 cols × 3 rows)
-const COLUMN_ZONES: Record<number, number[]> = {
-  0: [0, 3, 6],
-  1: [1, 4, 7],
-  2: [2, 5, 8],
-};
-
-// % position (left, top) of each zone inside the goal net
-const ZONE_POS: [number, number][] = [
-  [16, 28], [50, 28], [84, 28],
-  [16, 58], [50, 58], [84, 58],
-  [16, 84], [50, 84], [84, 84],
-];
-
-// Keeper horizontal center per column
-const KEEPER_LEFT = [14, 50, 86];
-
-const ARROWS = ["↖", "↑", "↗", "←", "·", "→", "↙", "↓", "↘"];
-
-function todayKey() {
-  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-}
 
 export function PenaltyGame({
   pubkey,
@@ -52,7 +37,7 @@ export function PenaltyGame({
     if (phase !== "aim" || usedToday || !pubkey) return;
 
     const col  = Math.floor(Math.random() * 3);
-    const goal = !COLUMN_ZONES[col].includes(z);
+    const goal = resolveKick(z, col);
 
     setZone(z);
     setKeeperCol(col);
