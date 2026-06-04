@@ -229,7 +229,7 @@ function HomeInner() {
       const res = await Promise.race([
         zapPromise,
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Tiempo de firma agotado — revisá Amber y reintentá")), 45_000)
+          setTimeout(() => reject(new Error("Tiempo de firma agotado — si usás Amber, abrilo y aprobá la firma")), 20_000)
         ),
       ]);
       if (!res.paid) {

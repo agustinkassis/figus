@@ -32,9 +32,13 @@ export function resolveKick(zone: number, col: number): boolean {
   return !COLUMN_ZONES[col].includes(zone);
 }
 
-/** Clave de localStorage para el tiro diario (formato YYYY-MM-DD) */
+/** Clave de localStorage para el tiro diario (formato YYYY-MM-DD local) */
 export function todayKey(): string {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
 }
 
 // ─── Commit-reveal helpers ────────────────────────────────────────────────────

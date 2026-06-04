@@ -49,6 +49,19 @@ interface LnurlPayResponse {
   nostrPubkey?: string;
 }
 
+async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { signal: ctrl.signal });
+  } catch (e: any) {
+    if (e.name === "AbortError") throw new Error("Tiempo de espera agotado al contactar el servidor Lightning");
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Resuelve una Lightning Address (user@domain) o un LNURL bech32 al JSON de pago
 async function resolveLnurl(lnurlOrAddress: string): Promise<LnurlPayResponse> {
   let url: string;
@@ -62,7 +75,7 @@ async function resolveLnurl(lnurlOrAddress: string): Promise<LnurlPayResponse> {
       "Usá una Lightning Address (user@dominio). El decode de LNURL bech32 queda como mejora."
     );
   }
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url, 12_000);
   if (!res.ok) throw new Error("No se pudo resolver el LNURL del destinatario");
   return res.json();
 }
@@ -115,7 +128,7 @@ export async function zap(
   const encoded = encodeURIComponent(JSON.stringify(zapRequest));
   const cbUrl = `${lnurl.callback}?amount=${amountMsat}&nostr=${encoded}`;
 
-  const cbRes = await fetch(cbUrl);
+  const cbRes = await fetchWithTimeout(cbUrl, 12_000);
   if (!cbRes.ok) throw new Error("El callback LNURL falló al generar el invoice");
   const { pr: invoice } = (await cbRes.json()) as { pr: string };
   if (!invoice) throw new Error("No se recibió invoice del callback");
@@ -138,15 +151,18 @@ export async function zap(
     }
   );
 
-  // Intentar pago automático con WebLN
+  // Intentar pago automático con WebLN (8s max — si cuelga mostramos la factura igual)
   let paid = false;
   if (typeof window !== "undefined" && window.webln) {
     try {
+      const weblnTimeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("webln timeout")), 8_000)
+      );
       await window.webln.enable();
-      await window.webln.sendPayment(invoice);
+      await Promise.race([window.webln.sendPayment(invoice), weblnTimeout]);
       paid = true;
     } catch {
-      paid = false; // el usuario paga manualmente
+      paid = false; // el usuario paga manualmente o WebLN colgó
     }
   }
 
