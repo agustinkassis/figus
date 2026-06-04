@@ -1,14 +1,15 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState, useEffect } from "react";
-import {
-  COLUMN_ZONES,
-  ZONE_POS,
-  KEEPER_LEFT,
-  ARROWS,
-  resolveKick,
-  todayKey,
-} from "@/lib/penalty";
+import { ARROWS, resolveKick, todayKey } from "@/lib/penalty";
+
+const PenaltyScene3D = dynamic(() => import("@/components/PenaltyScene3D"), {
+  ssr: false,
+  loading: () => (
+    <div style={{ height: 320, background: "#0d1a0d", borderRadius: 14 }} />
+  ),
+});
 
 type Phase = "aim" | "diving" | "result";
 
@@ -21,10 +22,10 @@ export function PenaltyGame({
   onGoal: () => void;
   onPublish: (result: "goal" | "save", zone: number, keeper: number, totalGoals: number) => void;
 }) {
-  const [phase, setPhase]       = useState<Phase>("aim");
-  const [zone, setZone]         = useState<number | null>(null);
-  const [keeperCol, setKeeperCol] = useState(1); // starts center
-  const [isGoal, setIsGoal]     = useState(false);
+  const [phase, setPhase]         = useState<Phase>("aim");
+  const [zone, setZone]           = useState<number | null>(null);
+  const [keeperCol, setKeeperCol] = useState(1);
+  const [isGoal, setIsGoal]       = useState(false);
   const [usedToday, setUsedToday] = useState(false);
   const [totalGoals, setTotalGoals] = useState(0);
 
@@ -59,8 +60,6 @@ export function PenaltyGame({
     }, 850);
   }
 
-  const [bx, by] = zone !== null ? ZONE_POS[zone] : [50, 50];
-
   return (
     <div style={{ fontFamily: "var(--condensed)" }}>
 
@@ -80,96 +79,20 @@ export function PenaltyGame({
         </div>
       </div>
 
-      {/* Field card */}
+      {/* 3D scene */}
+      <div style={{ borderRadius: 14, overflow: "hidden", boxShadow: "0 8px 28px rgba(0,0,0,.55)" }}>
+        <PenaltyScene3D />
+      </div>
+
+      {/* Controls */}
       <div style={{
         background: "linear-gradient(175deg, #1b5e20 0%, #2e7d32 45%, #388e3c 100%)",
         borderRadius: 14,
-        padding: "16px 14px 14px",
+        padding: "12px 14px",
+        marginTop: 8,
         border: "2px solid rgba(255,255,255,0.12)",
-        boxShadow: "inset 0 -4px 0 rgba(0,0,0,.35), 0 8px 28px rgba(0,0,0,.55)",
+        boxShadow: "inset 0 -4px 0 rgba(0,0,0,.35)",
       }}>
-
-        {/* Goal net */}
-        <div style={{
-          position: "relative",
-          height: 100,
-          background: "rgba(255,255,255,.06)",
-          border: "2.5px solid rgba(255,255,255,.75)",
-          borderBottom: "none",
-          borderRadius: "8px 8px 0 0",
-          marginBottom: 6,
-          overflow: "hidden",
-        }}>
-          {/* Net lines */}
-          <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.14, pointerEvents: "none" }}>
-            {[10,20,30,40,50,60,70,80,90].map(x => (
-              <line key={`v${x}`} x1={`${x}%`} y1="0" x2={`${x}%`} y2="100%" stroke="white" strokeWidth="0.8" />
-            ))}
-            {[25, 50, 75].map(y => (
-              <line key={`h${y}`} x1="0" y1={`${y}%`} x2="100%" y2={`${y}%`} stroke="white" strokeWidth="0.8" />
-            ))}
-          </svg>
-
-          {/* Keeper */}
-          <div style={{
-            position: "absolute",
-            bottom: 2,
-            left: `${KEEPER_LEFT[keeperCol]}%`,
-            transform: "translateX(-50%)",
-            transition: phase === "diving" ? "left 0.45s cubic-bezier(.25,.46,.45,.94)" : "none",
-            fontSize: 34,
-            lineHeight: 1,
-            filter: "drop-shadow(0 2px 6px rgba(0,0,0,.8))",
-            zIndex: 2,
-          }}>
-            🧤
-          </div>
-
-          {/* Ball — appears on result */}
-          {(phase === "result") && zone !== null && (
-            <div style={{
-              position: "absolute",
-              left: `${bx}%`,
-              top: `${by}%`,
-              transform: "translate(-50%, -50%)",
-              fontSize: 22,
-              zIndex: 3,
-              animation: "pop .35s cubic-bezier(.34,1.56,.64,1) both",
-              filter: isGoal ? "drop-shadow(0 0 14px rgba(255,255,200,.9))" : undefined,
-            }}>
-              ⚽
-            </div>
-          )}
-
-          {/* Zone highlight while aiming */}
-          {phase === "aim" && zone !== null && (
-            <div style={{
-              position: "absolute",
-              left: `${bx}%`,
-              top: `${by}%`,
-              transform: "translate(-50%, -50%)",
-              width: 28, height: 28,
-              borderRadius: "50%",
-              background: "rgba(255,255,255,.25)",
-              border: "2px solid rgba(255,255,255,.6)",
-              pointerEvents: "none",
-              zIndex: 1,
-            }} />
-          )}
-        </div>
-
-        {/* Penalty spot + field markings */}
-        <div style={{ position: "relative", height: 20, marginBottom: 8 }}>
-          <div style={{
-            position: "absolute", left: "50%", top: "50%",
-            transform: "translate(-50%, -50%)",
-            width: 6, height: 6, borderRadius: "50%",
-            background: "rgba(255,255,255,.5)",
-          }} />
-          <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.25, pointerEvents: "none" }}>
-            <line x1="0" y1="50%" x2="100%" y2="50%" stroke="white" strokeWidth="1" />
-          </svg>
-        </div>
 
         {/* Aim grid */}
         {phase === "aim" && !usedToday && pubkey && (
