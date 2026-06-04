@@ -40,6 +40,7 @@ export function useGameState(pubkey: string | null) {
     catch { return false; }
   });
   const ownEvents = useRef<Event[]>([]);
+  const listingEvents = useRef<Event[]>([]);
 
   // Carga inicial + suscripciones vivas
   useEffect(() => {
@@ -71,7 +72,10 @@ export function useGameState(pubkey: string | null) {
 
       // Ofertas abiertas del mercadito
       const ls = await list([{ kinds: [KIND.LISTING] }]);
-      if (!cancelled) setListings(parseListings(ls).filter((l) => l.status === "open"));
+      if (!cancelled) {
+        listingEvents.current = ls;
+        setListings(parseListings(ls).filter((l) => l.status === "open"));
+      }
 
       // Settlements recientes
       const st = await list([{ kinds: [KIND.SETTLEMENT], authors: [ISSUER_PUBKEY] }]);
@@ -96,10 +100,9 @@ export function useGameState(pubkey: string | null) {
         );
       }
       unsubs.push(
-        subscribe([{ kinds: [KIND.LISTING] }], () => {
-          list([{ kinds: [KIND.LISTING] }]).then((all) =>
-            setListings(parseListings(all).filter((l) => l.status === "open"))
-          );
+        subscribe([{ kinds: [KIND.LISTING] }], (ev) => {
+          listingEvents.current = [...listingEvents.current, ev];
+          setListings(parseListings(listingEvents.current).filter((l) => l.status === "open"));
         })
       );
       unsubs.push(
