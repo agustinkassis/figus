@@ -208,7 +208,9 @@ function HomeInner() {
     }, 90000);
 
     try {
-      const res = await zap(
+      // Race contra timeout de 45s: signEvent con Amber puede quedar colgado
+      // si el usuario no aprueba la firma en el teléfono.
+      const zapPromise = zap(
         {
           amountSats: 21,
           target: { pubkey: ISSUER_PUBKEY, lnurlOrAddress: ISSUER_LN_ADDRESS },
@@ -224,6 +226,12 @@ function HomeInner() {
           notify("⚡ Pago confirmado — esperando figus del issuer…");
         }
       );
+      const res = await Promise.race([
+        zapPromise,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Tiempo de firma agotado — revisá Amber y reintentá")), 45_000)
+        ),
+      ]);
       if (!res.paid) {
         const nwcStr = getNwcString();
         if (nwcStr) {

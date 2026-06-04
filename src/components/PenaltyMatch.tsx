@@ -9,22 +9,14 @@ import type { MatchState, Round } from "@/lib/penalty";
 import type { PenaltyMatch as PenaltyMatchType } from "@/lib/penalty";
 import { usePenaltyMatch, useOpenMatches, createMatch, cancelMatch } from "@/hooks/usePenaltyMatch";
 
-async function resolveInputToPubkey(input: string): Promise<string> {
-  const s = input.trim();
-  if (s.startsWith("npub1")) {
-    try {
-      const decoded = nip19.decode(s);
-      if (decoded.type === "npub") return decoded.data as string;
-    } catch {}
-    throw new Error("npub inválido");
-  }
-  if (/^[0-9a-f]{64}$/i.test(s)) return s.toLowerCase();
-  if (s.includes("@") || (!s.includes(" ") && s.includes("."))) {
-    const pointer = await nip05.queryProfile(s);
-    if (pointer?.pubkey) return pointer.pubkey;
-    throw new Error("NIP-05 no encontrado — revisá que esté bien escrito");
-  }
-  throw new Error("Formato inválido · usá npub1…, pubkey hex o usuario@dominio");
+async function fetchNostrMeta(pubkey: string): Promise<{ name?: string; picture?: string }> {
+  try {
+    const { list: listEvs } = await import("@/lib/pool");
+    const evs = await listEvs([{ kinds: [0], authors: [pubkey], limit: 1 }]);
+    if (!evs.length) return {};
+    const m = JSON.parse(evs[0].content);
+    return { name: m.name || m.display_name || m.username, picture: m.picture };
+  } catch { return {}; }
 }
 
 // ─── Shared visual: goal net + keeper + ball ──────────────────────────────────
@@ -489,24 +481,79 @@ export function PenaltyMatchLobby({
   const [publishing, setPublishing]     = useState(false);
   const [resolving, setResolving]       = useState(false);
   const [error, setError]               = useState<string | null>(null);
+  const [resolvedProfile, setResolvedProfile] = useState<{
+    pubkey: string; npub: string; name?: string; picture?: string;
+  } | null>(null);
+
+  // Resolve pubkey live as the user types
+  useEffect(() => {
+    const input = inputPk.trim();
+    setResolvedProfile(null);
+    setError(null);
+    if (!input) return;
+
+    // npub — resolve immediately
+    if (input.startsWith("npub1")) {
+      try {
+        const decoded = nip19.decode(input);
+        if (decoded.type === "npub") {
+          const pk = decoded.data as string;
+          setResolvedProfile({ pubkey: pk, npub: input });
+          fetchNostrMeta(pk).then(meta =>
+            setResolvedProfile(prev => prev?.pubkey === pk ? { ...prev, ...meta } : prev)
+          );
+        }
+      } catch {
+        setError("npub inválido");
+      }
+      return;
+    }
+
+    // hex pubkey — resolve immediately
+    if (/^[0-9a-f]{64}$/i.test(input)) {
+      const pk = input.toLowerCase();
+      const npub = nip19.npubEncode(pk);
+      setResolvedProfile({ pubkey: pk, npub });
+      fetchNostrMeta(pk).then(meta =>
+        setResolvedProfile(prev => prev?.pubkey === pk ? { ...prev, ...meta } : prev)
+      );
+      return;
+    }
+
+    // NIP-05 — debounce 700ms
+    if (!input.includes("@")) return;
+    setResolving(true);
+    const timer = setTimeout(async () => {
+      try {
+        const pointer = await nip05.queryProfile(input);
+        if (pointer?.pubkey) {
+          const pk = pointer.pubkey;
+          const npub = nip19.npubEncode(pk);
+          setResolvedProfile({ pubkey: pk, npub });
+          setError(null);
+          fetchNostrMeta(pk).then(meta =>
+            setResolvedProfile(prev => prev?.pubkey === pk ? { ...prev, ...meta } : prev)
+          );
+        } else {
+          setError("NIP-05 no encontrado — revisá que esté bien escrito");
+        }
+      } catch {
+        setError("NIP-05 no encontrado — revisá que esté bien escrito");
+      } finally {
+        setResolving(false);
+      }
+    }, 700);
+    return () => { clearTimeout(timer); setResolving(false); };
+  }, [inputPk]);
 
   async function handleCreate() {
-    if (!identity || !inputPk.trim()) return;
+    if (!identity || !resolvedProfile) return;
     setError(null);
-    let resolvedPk: string;
-    try {
-      setResolving(true);
-      resolvedPk = await resolveInputToPubkey(inputPk);
-    } catch (e: any) {
-      setError(e.message || "Identidad inválida");
-      return;
-    } finally {
-      setResolving(false);
-    }
     setPublishing(true);
     try {
-      await createMatch(identity, resolvedPk, Number(inputRounds) || 3);
+      await createMatch(identity, resolvedProfile.pubkey, Number(inputRounds) || 3);
       setInputPk("");
+      setResolvedProfile(null);
       setChallenging(false);
     } catch {
       setError("No se pudo publicar el desafío");
@@ -560,17 +607,60 @@ export function PenaltyMatchLobby({
           <textarea
             autoFocus
             value={inputPk}
-            onChange={e => { setInputPk(e.target.value); setError(null); }}
+            onChange={e => setInputPk(e.target.value)}
             placeholder="npub1… · hex · usuario@dominio.com"
             rows={2}
             style={{
               width: "100%", background: "var(--panel2)",
-              border: `1px solid ${error ? "#cc2244" : "var(--line)"}`,
+              border: `1px solid ${error ? "#cc2244" : resolvedProfile ? "rgba(82,183,136,.5)" : "var(--line)"}`,
               borderRadius: 8, padding: "8px 10px",
               color: "var(--ink)", fontSize: 11, fontFamily: "monospace",
-              resize: "none", boxSizing: "border-box", marginBottom: 8, outline: "none",
+              resize: "none", boxSizing: "border-box", marginBottom: 6, outline: "none",
             }}
           />
+
+          {/* Estado de resolución */}
+          {resolving && (
+            <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 8 }}>Buscando…</div>
+          )}
+          {error && !resolving && (
+            <div style={{ fontSize: 11, color: "#cc2244", marginBottom: 8 }}>{error}</div>
+          )}
+          {resolvedProfile && !resolving && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 8,
+              background: "rgba(82,183,136,.08)", border: "1px solid rgba(82,183,136,.3)",
+              borderRadius: 8, padding: "8px 10px", marginBottom: 8,
+            }}>
+              {resolvedProfile.picture ? (
+                <img
+                  src={resolvedProfile.picture}
+                  alt=""
+                  style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+                  onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                />
+              ) : (
+                <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--panel2)",
+                  display: "grid", placeItems: "center", fontSize: 16, flexShrink: 0 }}>
+                  👤
+                </div>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {resolvedProfile.name && (
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ink)", overflow: "hidden",
+                    textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {resolvedProfile.name}
+                  </div>
+                )}
+                <div style={{ fontSize: 9.5, color: "var(--muted)", fontFamily: "monospace",
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {resolvedProfile.npub.slice(0, 24)}…
+                </div>
+              </div>
+              <span style={{ color: "#52b788", fontSize: 16, flexShrink: 0 }}>✓</span>
+            </div>
+          )}
+
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
             <div style={{ fontSize: 10, color: "var(--muted)" }}>RONDAS</div>
             {[1, 3, 5].map(n => (
@@ -587,19 +677,18 @@ export function PenaltyMatchLobby({
               >{n}</button>
             ))}
           </div>
-          {error && <div style={{ fontSize: 11, color: "#cc2244", marginBottom: 8 }}>{error}</div>}
           <div style={{ display: "flex", gap: 8 }}>
             <button
               onClick={handleCreate}
-              disabled={!inputPk.trim() || publishing || resolving}
+              disabled={!resolvedProfile || publishing || resolving}
               style={{
                 flex: 1, background: "var(--fifa-blue)", color: "#fff", border: "none",
                 padding: "9px 0", borderRadius: 8, fontWeight: 900, fontSize: 12,
-                cursor: inputPk.trim() && !publishing && !resolving ? "pointer" : "not-allowed",
-                opacity: inputPk.trim() && !publishing && !resolving ? 1 : 0.5,
+                cursor: resolvedProfile && !publishing && !resolving ? "pointer" : "not-allowed",
+                opacity: resolvedProfile && !publishing && !resolving ? 1 : 0.5,
               }}
             >
-              {resolving ? "Buscando…" : publishing ? "Publicando…" : "DESAFIAR"}
+              {publishing ? "Publicando…" : "DESAFIAR"}
             </button>
             <button
               onClick={() => { setChallenging(false); setInputPk(""); setError(null); }}
