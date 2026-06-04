@@ -2,7 +2,7 @@
 // penalty.ts  → game logic (resolveKick, zones, commit-reveal)
 // penalty3d.ts → 3D coordinate system (shared by PenaltyScene3D and animation)
 
-export const GOAL_Z      = -9;          // goal sits at z = -9
+export const GOAL_Z      = -4;          // goal sits at z = -4
 export const GOAL_W      = 7.32;        // real goal width (m)
 export const HALF_W      = GOAL_W / 2;
 export const GOAL_H      = 2.44;        // real goal height (m)
@@ -11,7 +11,7 @@ export const NET_DEPTH   = 1.3;         // depth of the goal box
 export const FLIGHT_TIME = 0.92;        // ball flight duration in seconds
 
 // Camera — matches demo's CAM_BASE / CAM_LOOK
-export const CAM_POS  = [0, 1.75, 4.6] as const;
+export const CAM_POS  = [0, 1.3, 2.5] as const;
 export const CAM_LOOK = [0, 1.15, GOAL_Z] as const;
 
 // Ball resting on the penalty spot

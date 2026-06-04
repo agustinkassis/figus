@@ -11,7 +11,7 @@ const PenaltyScene3D = dynamic(() => import("@/components/PenaltyScene3D"), {
   ),
 });
 
-type Phase = "aim" | "diving" | "result";
+type Phase = "aim" | "flying" | "result";
 
 export function PenaltyGame({
   pubkey,
@@ -43,7 +43,7 @@ export function PenaltyGame({
     setZone(z);
     setKeeperCol(col);
     setIsGoal(goal);
-    setPhase("diving");
+    setPhase("flying");
 
     setTimeout(() => {
       setPhase("result");
@@ -76,12 +76,24 @@ export function PenaltyGame({
         <div style={{ textAlign: "right", flexShrink: 0 }}>
           <div style={{ fontSize: 28, fontWeight: 900, color: "var(--gold)", lineHeight: 1 }}>{totalGoals}</div>
           <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 1 }}>GOLES TOTALES</div>
+          {process.env.NODE_ENV === "development" && (
+            <button
+              onClick={() => {
+                localStorage.removeItem(`pk_${todayKey()}`);
+                setUsedToday(false);
+                setPhase("aim");
+              }}
+              style={{ fontSize: 9, color: "var(--muted)", background: "none", border: "1px solid var(--line)", borderRadius: 4, padding: "2px 6px", cursor: "pointer", marginTop: 4 }}
+            >
+              reset dev
+            </button>
+          )}
         </div>
       </div>
 
       {/* 3D scene */}
       <div style={{ borderRadius: 14, overflow: "hidden", boxShadow: "0 8px 28px rgba(0,0,0,.55)" }}>
-        <PenaltyScene3D />
+        <PenaltyScene3D phase={phase} zone={zone} keeperCol={keeperCol} isGoal={isGoal} />
       </div>
 
       {/* Controls */}
@@ -133,13 +145,6 @@ export function PenaltyGame({
                 </button>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* Diving animation */}
-        {phase === "diving" && (
-          <div style={{ textAlign: "center", padding: "6px 0 2px", fontSize: 26, animation: "pop .2s both" }}>
-            ⚽
           </div>
         )}
 

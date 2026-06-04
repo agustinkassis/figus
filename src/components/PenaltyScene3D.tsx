@@ -1,14 +1,55 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
-import { Canvas, useThree } from "@react-three/fiber";
+import { useEffect, useMemo, useRef } from "react";
+import { Canvas, useFrame, useLoader } from "@react-three/fiber";
+import { useFBX, useAnimations, useGLTF } from "@react-three/drei";
+import { FBXLoader } from "three-stdlib";
 import * as THREE from "three";
 import {
   GOAL_Z, GOAL_W, HALF_W, GOAL_H, POST_R, NET_DEPTH,
-  CAM_POS, CAM_LOOK,
+  CAM_POS, CAM_LOOK, BALL_HOME, FLIGHT_TIME,
+  zone3DTarget,
 } from "@/lib/penalty3d";
 
-// ── Canvas textures (created once, client-side only) ──────────────────────────
+// ── Public props ──────────────────────────────────────────────────────────────
+
+export interface PenaltyScene3DProps {
+  phase?: "aim" | "flying" | "result";
+  zone?: number | null;
+  keeperCol?: number;
+  isGoal?: boolean;
+}
+
+// ── Animation file per zone ───────────────────────────────────────────────────
+// 9 zones (3×3): row 0=top, row 1=mid, row 2=bottom; col 0=left, 1=center, 2=right
+
+const ANIM_CLIPS = [
+  { name: "arriba-izquierda", path: "/Goalkeeper arriba izquierda.fbx" },
+  { name: "arriba",           path: "/Goalkeeper arriba.fbx"           },
+  { name: "arriba-derecha",   path: "/Goalkeeper arriba derecha.fbx"   },
+  { name: "izquierda",        path: "/goalkeeper izquierda.fbx"        },
+  { name: "medio",            path: "/Goalkeeper medio.fbx"            },
+  { name: "derecha",          path: "/goalkeeper derecha.fbx"          },
+  { name: "abajo",            path: "/Goalkeeper abajo.fbx"            },
+] as const;
+
+const ANIM_PATHS = ANIM_CLIPS.map(a => a.path);
+
+// Random animation based on keeper's guess column (not ball zone).
+// col 0/2 are in PLAYER space; keeper faces the player so left↔right are mirrored.
+// keeperCol=0 (player's left)  → keeper dives to THEIR right → "derecha" animation
+// keeperCol=2 (player's right) → keeper dives to THEIR left  → "izquierda" animation
+function keeperColToClip(col: number): string {
+  const r = Math.random();
+  if (col === 0) return r < 0.55 ? "derecha"   : "arriba-derecha";
+  if (col === 2) return r < 0.55 ? "izquierda" : "arriba-izquierda";
+  // center column: mix of medio, arriba, abajo
+  if (r < 0.45) return "medio";
+  if (r < 0.75) return "arriba";
+  return "abajo";
+}
+
+// ── Canvas textures ───────────────────────────────────────────────────────────
 
 function useGrassTexture() {
   return useMemo(() => {
@@ -44,7 +85,7 @@ function useNetTexture(rx: number, ry: number) {
   }, [rx, ry]);
 }
 
-// ── Grass ground ──────────────────────────────────────────────────────────────
+// ── Ground ────────────────────────────────────────────────────────────────────
 
 function Ground() {
   const map = useGrassTexture();
@@ -56,7 +97,7 @@ function Ground() {
   );
 }
 
-// ── Dark stadium backdrop behind the goal ─────────────────────────────────────
+// ── Stadium backdrop ──────────────────────────────────────────────────────────
 
 function Backdrop() {
   return (
@@ -67,7 +108,7 @@ function Backdrop() {
   );
 }
 
-// ── Net: back plane + horizontal top + two side planes ───────────────────────
+// ── Net ───────────────────────────────────────────────────────────────────────
 
 function Net() {
   const backTex = useNetTexture(12, 4);
@@ -76,29 +117,25 @@ function Net() {
 
   const backMat = useMemo(() => new THREE.MeshBasicMaterial(
     { map: backTex, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }),
-    [backTex]);
-  const topMat  = useMemo(() => new THREE.MeshBasicMaterial(
-    { map: topTex,  transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }),
-    [topTex]);
+  [backTex]);
+  const topMat = useMemo(() => new THREE.MeshBasicMaterial(
+    { map: topTex, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }),
+  [topTex]);
   const sideMat = useMemo(() => new THREE.MeshBasicMaterial(
     { map: sideTex, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }),
-    [sideTex]);
+  [sideTex]);
 
   return (
     <>
-      {/* Back net */}
       <mesh position={[0, GOAL_H / 2, -NET_DEPTH]} material={backMat}>
         <planeGeometry args={[GOAL_W, GOAL_H]} />
       </mesh>
-      {/* Top net (horizontal) */}
       <mesh position={[0, GOAL_H, -NET_DEPTH / 2]} rotation={[-Math.PI / 2, 0, 0]} material={topMat}>
         <planeGeometry args={[GOAL_W, NET_DEPTH]} />
       </mesh>
-      {/* Left side */}
       <mesh position={[-HALF_W, GOAL_H / 2, -NET_DEPTH / 2]} rotation={[0, Math.PI / 2, 0]} material={sideMat}>
         <planeGeometry args={[NET_DEPTH, GOAL_H]} />
       </mesh>
-      {/* Right side */}
       <mesh position={[HALF_W, GOAL_H / 2, -NET_DEPTH / 2]} rotation={[0, -Math.PI / 2, 0]} material={sideMat}>
         <planeGeometry args={[NET_DEPTH, GOAL_H]} />
       </mesh>
@@ -106,85 +143,24 @@ function Net() {
   );
 }
 
-// ── Goal: posts + crossbar + net ──────────────────────────────────────────────
+// ── Goal ──────────────────────────────────────────────────────────────────────
 
 function Goal() {
   const postMat = useMemo(
     () => new THREE.MeshStandardMaterial({ color: "white", roughness: 0.4, metalness: 0.1 }),
-    []);
-
+  []);
   return (
     <group position={[0, 0, GOAL_Z]}>
-      {/* Left post */}
       <mesh position={[-HALF_W, GOAL_H / 2, 0]} castShadow material={postMat}>
         <cylinderGeometry args={[POST_R, POST_R, GOAL_H, 16]} />
       </mesh>
-      {/* Right post */}
       <mesh position={[HALF_W, GOAL_H / 2, 0]} castShadow material={postMat}>
         <cylinderGeometry args={[POST_R, POST_R, GOAL_H, 16]} />
       </mesh>
-      {/* Crossbar */}
       <mesh position={[0, GOAL_H, 0]} rotation={[0, 0, Math.PI / 2]} castShadow material={postMat}>
         <cylinderGeometry args={[POST_R, POST_R, GOAL_W + POST_R * 2, 16]} />
       </mesh>
       <Net />
-    </group>
-  );
-}
-
-// ── Ball on penalty spot ──────────────────────────────────────────────────────
-
-function Ball() {
-  return (
-    <mesh position={[0, 0.12, 0]} castShadow>
-      <sphereGeometry args={[0.12, 24, 24]} />
-      <meshStandardMaterial color="white" roughness={0.35} metalness={0.05} />
-    </mesh>
-  );
-}
-
-// ── Goalkeeper (procedural, matches demo style) ───────────────────────────────
-
-function Keeper() {
-  const jersey = useMemo(() => new THREE.MeshStandardMaterial({ color: "#16c79a", roughness: 0.6 }), []);
-  const skin   = useMemo(() => new THREE.MeshStandardMaterial({ color: "#f1c27d", roughness: 0.7 }), []);
-  const glove  = useMemo(() => new THREE.MeshStandardMaterial({ color: "#ff4d6d", roughness: 0.5 }), []);
-  const dark   = useMemo(() => new THREE.MeshStandardMaterial({ color: "#222a44", roughness: 0.8 }), []);
-
-  return (
-    <group position={[0, 0, GOAL_Z + 0.45]}>
-      {/* Left leg */}
-      <mesh position={[-0.13, 0.33, 0]} castShadow material={dark}>
-        <cylinderGeometry args={[0.09, 0.09, 0.7, 10]} />
-      </mesh>
-      {/* Right leg */}
-      <mesh position={[0.13, 0.33, 0]} castShadow material={dark}>
-        <cylinderGeometry args={[0.09, 0.09, 0.7, 10]} />
-      </mesh>
-      {/* Torso */}
-      <mesh position={[0, 1.05, 0]} castShadow material={jersey}>
-        <cylinderGeometry args={[0.26, 0.30, 0.85, 14]} />
-      </mesh>
-      {/* Head */}
-      <mesh position={[0, 1.62, 0]} castShadow material={skin}>
-        <sphereGeometry args={[0.20, 18, 18]} />
-      </mesh>
-      {/* Left arm — spread out */}
-      <mesh position={[-0.34, 1.18, 0]} rotation={[0, 0, 0.95]} castShadow material={jersey}>
-        <cylinderGeometry args={[0.07, 0.07, 0.7, 10]} />
-      </mesh>
-      {/* Right arm — spread out */}
-      <mesh position={[0.34, 1.18, 0]} rotation={[0, 0, -0.95]} castShadow material={jersey}>
-        <cylinderGeometry args={[0.07, 0.07, 0.7, 10]} />
-      </mesh>
-      {/* Left glove */}
-      <mesh position={[-0.62, 1.42, 0]} castShadow material={glove}>
-        <sphereGeometry args={[0.11, 12, 12]} />
-      </mesh>
-      {/* Right glove */}
-      <mesh position={[0.62, 1.42, 0]} castShadow material={glove}>
-        <sphereGeometry args={[0.11, 12, 12]} />
-      </mesh>
     </group>
   );
 }
@@ -206,7 +182,6 @@ function Lights() {
   return (
     <>
       <hemisphereLight args={[0x88aaff as unknown as THREE.ColorRepresentation, 0x223b1f as unknown as THREE.ColorRepresentation, 0.55]} />
-      {/* Key light — stadium flood from upper-left front */}
       <directionalLight
         position={[-6, 12, 6]}
         intensity={1.15}
@@ -221,25 +196,280 @@ function Lights() {
         shadow-camera-top={12}
         shadow-camera-bottom={-12}
       />
-      {/* Rim — blue fill from right-back */}
       <directionalLight position={[6, 8, -10]} intensity={0.5} color="#bcd2ff" />
     </>
   );
 }
 
-// ── Camera rig: applies lookAt once after mount ───────────────────────────────
+// ── Goalkeeper ────────────────────────────────────────────────────────────────
 
-function CameraRig() {
-  const camera = useThree(s => s.camera);
+type KeeperGLTF = {
+  materials: { "Material.001": THREE.MeshStandardMaterial };
+};
+
+function Keeper({
+  keeperRef,
+  phase,
+  keeperCol,
+}: {
+  keeperRef: React.RefObject<THREE.Group>;
+  phase: "aim" | "flying" | "result";
+  keeperCol: number;
+}) {
+  // Primary model — provides the mesh + skeleton structure
+  const primaryFbx = useFBX("/Goalkeeper medio.fbx");
+
+  // All 7 animation FBX files loaded in parallel (useLoader caches them)
+  const animFbxs = useLoader(FBXLoader, ANIM_PATHS) as THREE.Group[];
+
+  // Extract one named clip from each animation FBX.
+  // Zero out the Hips Z track so the keeper stays in front of the net
+  // (root-bone Z motion would push the character backward into the net).
+  const clips = useMemo(() => {
+    return ANIM_CLIPS.map(({ name }, i) => {
+      const src = animFbxs[i]?.animations[0];
+      if (!src) return null;
+      const clip = src.clone();
+      clip.name = name;
+
+      clip.tracks = clip.tracks.map(track => {
+        if (/hips\.position/i.test(track.name)) {
+          const vt = track as THREE.VectorKeyframeTrack;
+          const vals = Float32Array.from(vt.values);
+          // Zero every Z component (index 2, 5, 8 … in x,y,z triplets)
+          for (let j = 2; j < vals.length; j += 3) vals[j] = 0;
+          return new THREE.VectorKeyframeTrack(
+            track.name,
+            Array.from(vt.times),
+            Array.from(vals),
+          );
+        }
+        return track;
+      });
+
+      return clip;
+    }).filter(Boolean) as THREE.AnimationClip[];
+  }, [animFbxs]);
+
+  const { actions } = useAnimations(clips, keeperRef);
+
+  // Apply ostrich texture from arquero.glb — same purple palette, different UV
+  const { materials: ostrichMats } = useGLTF("/arquero.glb") as unknown as KeeperGLTF;
+  const keeperMat = useMemo(() => {
+    const src = ostrichMats["Material.001"];
+    return new THREE.MeshStandardMaterial({
+      map:       src?.map       ?? null,
+      roughness: src?.roughness ?? 0.65,
+      metalness: src?.metalness ?? 0.05,
+      color:     src?.color    ?? new THREE.Color("#7a3db5"),
+    });
+  }, [ostrichMats]);
+
   useEffect(() => {
-    camera.lookAt(CAM_LOOK[0], CAM_LOOK[1], CAM_LOOK[2]);
-  }, [camera]);
-  return null;
+    primaryFbx.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (mesh.isMesh) {
+        mesh.material = keeperMat;
+        mesh.castShadow = true;
+      }
+    });
+  }, [primaryFbx, keeperMat]);
+
+  // Track phase transitions to trigger animation
+  const prevPhase = useRef<string>("aim");
+  const activeClip = useRef<string>("medio");
+
+  useFrame(() => {
+    const cur  = phase;
+    const prev = prevPhase.current;
+
+    if (cur === "flying" && prev !== "flying") {
+      // Choose a random clip that matches the keeper's guess direction
+      const clipName = keeperColToClip(keeperCol);
+      activeClip.current = clipName;
+
+      const action = actions[clipName];
+      if (action) {
+        // Stop any running action first
+        Object.values(actions).forEach(a => a?.stop());
+        action.reset().setLoop(THREE.LoopOnce, 1);
+        action.clampWhenFinished = true;
+        action.timeScale = 1.3;
+        action.play();
+      }
+    } else if (cur === "aim" && prev !== "aim") {
+      Object.values(actions).forEach(a => a?.stop());
+    }
+
+    prevPhase.current = cur;
+  });
+
+  return (
+    <group ref={keeperRef} position={[0, 0, GOAL_Z + 0.45]}>
+      <primitive object={primaryFbx} scale={0.012} rotation={[0, Math.PI, 0]} />
+    </group>
+  );
 }
 
-// ── Scene ─────────────────────────────────────────────────────────────────────
+useGLTF.preload("/arquero.glb");
 
-function Scene() {
+// ── Ball — procedural soccer ball shader ──────────────────────────────────────
+// Pattern: 12 black pentagons at icosahedron vertices + white hexagons.
+// vObjN (object-space normal) drives the pattern so it spins with ball.rotation.
+
+const BALL_VERT = /* glsl */`
+  varying vec3 vObjN;
+  varying vec3 vN;
+  varying vec3 vViewPos;
+  void main() {
+    vObjN       = normalize(normal);
+    vN          = normalize(normalMatrix * normal);
+    vec4 mv     = modelViewMatrix * vec4(position, 1.0);
+    vViewPos    = -mv.xyz;
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+
+const BALL_FRAG = /* glsl */`
+  #define PHI 1.6180339887
+  varying vec3 vObjN;
+  varying vec3 vN;
+  varying vec3 vViewPos;
+
+  // Update d1/d2 with dot product of p against a new icosahedron vertex
+  void chk(vec3 p, vec3 v, inout float d1, inout float d2) {
+    float d = dot(p, normalize(v));
+    if      (d > d1) { d2 = d1; d1 = d; }
+    else if (d > d2) { d2 = d; }
+  }
+
+  void main() {
+    vec3 p = normalize(vObjN);  // object-space → pattern rotates with ball
+    vec3 n = normalize(vN);     // view-space   → lighting
+
+    // Find two closest icosahedron vertices (12 pentagon centers)
+    float d1 = -2.0, d2 = -2.0;
+    chk(p, vec3( 0.0,  1.0,  PHI), d1, d2);
+    chk(p, vec3( 0.0, -1.0,  PHI), d1, d2);
+    chk(p, vec3( 0.0,  1.0, -PHI), d1, d2);
+    chk(p, vec3( 0.0, -1.0, -PHI), d1, d2);
+    chk(p, vec3( 1.0,  PHI,  0.0), d1, d2);
+    chk(p, vec3(-1.0,  PHI,  0.0), d1, d2);
+    chk(p, vec3( 1.0, -PHI,  0.0), d1, d2);
+    chk(p, vec3(-1.0, -PHI,  0.0), d1, d2);
+    chk(p, vec3( PHI,  0.0,  1.0), d1, d2);
+    chk(p, vec3(-PHI,  0.0,  1.0), d1, d2);
+    chk(p, vec3( PHI,  0.0, -1.0), d1, d2);
+    chk(p, vec3(-PHI,  0.0, -1.0), d1, d2);
+
+    // Seam: where two vertices are equidistant → panel edge
+    float edge  = 1.0 - smoothstep(0.0, 0.04, d1 - d2);
+    // Pentagon fill: very close to an icosahedron vertex
+    float penta = smoothstep(0.91, 0.945, d1);
+    float dark  = max(edge, penta);
+
+    vec3 base = mix(vec3(1.0), vec3(0.06), dark);
+
+    // Phong lighting (fixed scene light direction)
+    vec3 L   = normalize(vec3(-0.5, 1.0, 0.5));
+    vec3 V   = normalize(vViewPos);
+    float dif = clamp(dot(n, L), 0.0, 1.0) * 1.05 + 0.38;
+    float spc = pow(clamp(dot(reflect(-L, n), V), 0.0, 1.0), 28.0) * 0.45;
+
+    gl_FragColor = vec4(base * dif + spc, 1.0);
+  }
+`;
+
+function Ball({ ballRef }: { ballRef: React.RefObject<THREE.Mesh> }) {
+  const mat = useMemo(
+    () => new THREE.ShaderMaterial({ vertexShader: BALL_VERT, fragmentShader: BALL_FRAG }),
+    [],
+  );
+  return (
+    <mesh ref={ballRef} position={[BALL_HOME[0], BALL_HOME[1], BALL_HOME[2]]} castShadow>
+      <sphereGeometry args={[0.12, 32, 32]} />
+      <primitive object={mat} attach="material" />
+    </mesh>
+  );
+}
+
+// ── Scene + animation loop ────────────────────────────────────────────────────
+
+function Scene({ phase = "aim", zone = null, keeperCol = 1, isGoal = false }: PenaltyScene3DProps) {
+  const ballRef   = useRef<THREE.Mesh>(null);
+  const keeperRef = useRef<THREE.Group>(null);
+
+  const flyStart  = useRef(0);
+  const arcH      = useRef(0.65);
+  const shakeT    = useRef(0);
+  const prevPhase = useRef("aim");
+  const ballEnd   = useRef(new THREE.Vector3());
+  const ballStart = useRef(new THREE.Vector3(BALL_HOME[0], BALL_HOME[1], BALL_HOME[2]));
+
+  useFrame(({ camera, clock }) => {
+    const t = clock.getElapsedTime();
+
+    if (phase === "flying" && prevPhase.current !== "flying") {
+      flyStart.current = t;
+      arcH.current = 0.55 + Math.random() * 0.25;
+      if (zone !== null) {
+        const tgt = zone3DTarget(zone);
+        ballEnd.current.set(tgt[0], tgt[1], tgt[2]);
+      }
+    }
+    prevPhase.current = phase;
+
+    // Camera sway + shake
+    let sx = Math.sin(t * 0.6) * 0.04;
+    let sy = Math.cos(t * 0.45) * 0.03;
+    if (shakeT.current > 0) {
+      shakeT.current = Math.max(shakeT.current - 1 / 60, 0);
+      sx += (Math.random() - 0.5) * 0.12;
+      sy += (Math.random() - 0.5) * 0.12;
+    }
+    camera.position.set(CAM_POS[0] + sx, CAM_POS[1] + sy, CAM_POS[2]);
+    camera.lookAt(CAM_LOOK[0], CAM_LOOK[1], CAM_LOOK[2]);
+
+    if (!ballRef.current || !keeperRef.current) return;
+    const ball   = ballRef.current;
+    const keeper = keeperRef.current;
+
+    // AIM: reset positions
+    if (phase === "aim") {
+      ball.position.set(BALL_HOME[0], BALL_HOME[1], BALL_HOME[2]);
+      ball.rotation.set(0, 0, 0);
+      keeper.position.set(0, 0, GOAL_Z + 0.45);
+      keeper.rotation.set(0, 0, 0);
+      return;
+    }
+
+    if (zone === null) return;
+
+    // FLYING: ball arc — keeper position handled by skeletal animation
+    if (phase === "flying") {
+      const p = Math.min((t - flyStart.current) / FLIGHT_TIME, 1);
+      ball.position.lerpVectors(ballStart.current, ballEnd.current, p);
+      ball.position.y += Math.sin(p * Math.PI) * arcH.current;
+      ball.rotation.x -= 0.4;
+      ball.rotation.y -= 0.2;
+
+      if (p >= 1 && isGoal && shakeT.current <= 0) {
+        shakeT.current = 0.35;
+      }
+      return;
+    }
+
+    // RESULT: freeze ball
+    if (phase === "result") {
+      const tgt = zone3DTarget(zone);
+      if (isGoal) {
+        ball.position.set(tgt[0], tgt[1], tgt[2] - 0.4);
+      } else {
+        ball.position.set(tgt[0] * 0.7, Math.max(tgt[1], 0.95), GOAL_Z + 0.55);
+      }
+    }
+  });
+
   return (
     <>
       <Lights />
@@ -247,21 +477,21 @@ function Scene() {
       <Backdrop />
       <Goal />
       <PenaltySpot />
-      <Ball />
-      <Keeper />
+      <Ball ballRef={ballRef} />
+      <Keeper keeperRef={keeperRef} phase={phase} keeperCol={keeperCol} />
     </>
   );
 }
 
-// ── Canvas export (loaded via next/dynamic with ssr:false) ────────────────────
+// ── Canvas export ─────────────────────────────────────────────────────────────
 
-export default function PenaltyScene3D() {
+export default function PenaltyScene3D(props: PenaltyScene3DProps) {
   return (
     <div style={{ width: "100%", height: 320 }}>
       <Canvas
         shadows
         dpr={[1, 2]}
-        camera={{ position: [CAM_POS[0], CAM_POS[1], CAM_POS[2]], fov: 50 }}
+        camera={{ position: [CAM_POS[0], CAM_POS[1], CAM_POS[2]], fov: 55 }}
         gl={{ antialias: true }}
         onCreated={({ gl }) => {
           gl.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -269,9 +499,8 @@ export default function PenaltyScene3D() {
         style={{ width: "100%", height: "100%" }}
       >
         <color attach="background" args={["#0a1330"]} />
-        <fog attach="fog" args={["#0a1330", 14, 34]} />
-        <Scene />
-        <CameraRig />
+        <fog attach="fog" args={["#0a1330", 8, 20]} />
+        <Scene {...props} />
       </Canvas>
     </div>
   );
