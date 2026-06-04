@@ -42,7 +42,7 @@ function HomeInner() {
   const { identity, nip07Available, connectNip07, connectLocal, connectNip46QR, connectNip46Bunker, logout, importNsec } =
     useIdentity();
   const pubkey = identity?.pubkey ?? null;
-  const { ownership, listings, settlements, owned, dupes, loading, refresh, hasClaimedFreePack } =
+  const { ownership, listings, settlements, owned, dupes, loading, refresh, hasClaimedFreePack, claimPack } =
     useGameState(pubkey);
 
   const [tab, setTab] = useState<Tab>("album");
@@ -99,6 +99,7 @@ function HomeInner() {
         .filter((n) => n > 0);
       if (!nums.length) return;
       grantReceived = true;
+      claimPack(nums);
       setPackResult(nums);
       refresh();
       unsubGrant?.();
@@ -130,6 +131,7 @@ function HomeInner() {
         unsubGrant?.();
         if (pollIv) clearInterval(pollIv);
         const nums = Array.from({ length: 7 }, () => rollSticker());
+        claimPack(nums);
         setPackResult(nums);
         setBusy(false);
         notify("🎁 Sobre de regalo abierto · el issuer confirmará las figuritas pronto");

@@ -12,12 +12,33 @@ import {
 import type { Listing, Ownership, Settlement } from "@/lib/types";
 import { ALL_NUMBERS } from "@/lib/catalog";
 
+const LOCAL_OWN_KEY = "figus_local_own";
+const LOCAL_CLAIMED_KEY = "figus_local_claimed";
+
+function readLocalOwn(): Ownership {
+  try { return JSON.parse(localStorage.getItem(LOCAL_OWN_KEY) ?? "{}") ?? {}; }
+  catch { return {}; }
+}
+
+// Take the higher count per sticker from both sources
+function mergeOwn(nostr: Ownership, local: Ownership): Ownership {
+  const result: Ownership = { ...local };
+  for (const k of Object.keys(nostr)) {
+    const n = Number(k);
+    result[n] = Math.max(result[n] ?? 0, nostr[n]);
+  }
+  return result;
+}
+
 export function useGameState(pubkey: string | null) {
-  const [ownership, setOwnership] = useState<Ownership>({});
+  const [ownership, setOwnership] = useState<Ownership>(() => readLocalOwn());
   const [listings, setListings] = useState<Listing[]>([]);
   const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [loading, setLoading] = useState(true);
-  const [hasClaimedFreePack, setHasClaimedFreePack] = useState(false);
+  const [hasClaimedFreePack, setHasClaimedFreePack] = useState<boolean>(() => {
+    try { return !!localStorage.getItem(LOCAL_CLAIMED_KEY); }
+    catch { return false; }
+  });
   const ownEvents = useRef<Event[]>([]);
 
   // Carga inicial + suscripciones vivas
@@ -36,15 +57,15 @@ export function useGameState(pubkey: string | null) {
       if (pubkey) {
         const [owns, grants, freeClaims] = await Promise.all([
           list([{ kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY], "#p": [pubkey] }]),
-          // Al menos 1 GRANT del issuer = ya abrió algún sobre (gratis o pago)
           list([{ kinds: [KIND.GRANT], authors: [ISSUER_PUBKEY], "#p": [pubkey], limit: 1 }]),
-          // El usuario mismo publica el claim como prueba persistente en Nostr
           list([{ kinds: [KIND.FREE_PACK_CLAIM], authors: [pubkey], "#d": [`free-pack:${ALBUM_ID}`] }]),
         ]);
         if (!cancelled) {
           ownEvents.current = owns;
-          setOwnership(parseOwnership(owns));
-          setHasClaimedFreePack(grants.length > 0 || freeClaims.length > 0);
+          setOwnership(mergeOwn(parseOwnership(owns), readLocalOwn()));
+          const claimed = grants.length > 0 || freeClaims.length > 0 || !!localStorage.getItem(LOCAL_CLAIMED_KEY);
+          setHasClaimedFreePack(claimed);
+          if (claimed) localStorage.setItem(LOCAL_CLAIMED_KEY, "1");
         }
       }
 
@@ -69,14 +90,13 @@ export function useGameState(pubkey: string | null) {
             [{ kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY], "#p": [pubkey] }],
             (ev) => {
               ownEvents.current = [...ownEvents.current, ev];
-              setOwnership(parseOwnership(ownEvents.current));
+              setOwnership(mergeOwn(parseOwnership(ownEvents.current), readLocalOwn()));
             }
           )
         );
       }
       unsubs.push(
         subscribe([{ kinds: [KIND.LISTING] }], () => {
-          // re-leer ofertas (simple y robusto)
           list([{ kinds: [KIND.LISTING] }]).then((all) =>
             setListings(parseListings(all).filter((l) => l.status === "open"))
           );
@@ -105,8 +125,25 @@ export function useGameState(pubkey: string | null) {
       { kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY], "#p": [pubkey] },
     ]);
     ownEvents.current = owns;
-    setOwnership(parseOwnership(owns));
+    setOwnership(mergeOwn(parseOwnership(owns), readLocalOwn()));
   }, [pubkey]);
 
-  return { ownership, listings, settlements, owned, dupes, loading, refresh, albumId: ALBUM_ID, hasClaimedFreePack };
+  // Saves stickers locally (used for free-pack fallback and penalty goal reward).
+  // Immediately updates state + persists to localStorage so stickers survive reload.
+  const claimPack = useCallback((nums: number[]) => {
+    setHasClaimedFreePack(true);
+    try {
+      localStorage.setItem(LOCAL_CLAIMED_KEY, "1");
+      const local = readLocalOwn();
+      for (const n of nums) local[n] = (local[n] ?? 0) + 1;
+      localStorage.setItem(LOCAL_OWN_KEY, JSON.stringify(local));
+      setOwnership(prev => {
+        const next = { ...prev };
+        for (const n of nums) next[n] = (next[n] ?? 0) + 1;
+        return next;
+      });
+    } catch {}
+  }, []);
+
+  return { ownership, listings, settlements, owned, dupes, loading, refresh, albumId: ALBUM_ID, hasClaimedFreePack, claimPack };
 }
