@@ -357,6 +357,7 @@ function HomeInner() {
           // Pago confirmado: acreditar la figurita localmente de inmediato.
           // El issuer publicará el OWNERSHIP en Nostr y mergeOwn lo reconciliará.
           addSticker(listing.stickerNum);
+          setInvoice(null);
           notify(`✅ ¡Pago confirmado! La #${listing.stickerNum} fue acreditada a tu álbum`);
           setTimeout(refresh, 3000);
         }

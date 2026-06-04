@@ -12,9 +12,8 @@ import {
 import type { Listing, Ownership, Settlement } from "@/lib/types";
 import { ALL_NUMBERS } from "@/lib/catalog";
 
-const ownKey      = (pk: string) => `figus_own_${pk}`;
-const claimedKey  = (pk: string) => `figus_claimed_${pk}`;
-const soldKey     = (pk: string) => `figus_sold_${pk}`;
+const ownKey     = (pk: string) => `figus_own_${pk}`;
+const claimedKey = (pk: string) => `figus_claimed_${pk}`;
 
 function readLocalOwn(pubkey: string): Ownership {
   try { return JSON.parse(localStorage.getItem(ownKey(pubkey)) ?? "{}") ?? {}; }
@@ -29,37 +28,25 @@ function isLocalClaimed(pubkey: string): boolean {
   try { return !!localStorage.getItem(claimedKey(pubkey)); } catch { return false; }
 }
 
-function getAppliedSales(pubkey: string): Set<string> {
-  try { return new Set(JSON.parse(localStorage.getItem(soldKey(pubkey)) ?? "[]")); }
-  catch { return new Set(); }
-}
-
-function markSaleApplied(pubkey: string, id: string) {
-  try {
-    const s = getAppliedSales(pubkey);
-    s.add(id);
-    localStorage.setItem(soldKey(pubkey), JSON.stringify([...s]));
-  } catch {}
-}
-
-function applySellerDecrement(pubkey: string, stickerNum: number, settlementId: string): boolean {
-  const applied = getAppliedSales(pubkey);
-  if (applied.has(settlementId)) return false;
-  const local = readLocalOwn(pubkey);
-  if ((local[stickerNum] ?? 0) > 0) {
-    local[stickerNum] = Math.max(0, (local[stickerNum] ?? 0) - 1);
-    writeLocalOwn(pubkey, local);
-  }
-  markSaleApplied(pubkey, settlementId);
-  return true;
-}
-
-// Take the higher count per sticker from both sources
+// Merge nostr + local taking the max per sticker
 function mergeOwn(nostr: Ownership, local: Ownership): Ownership {
   const result: Ownership = { ...local };
   for (const k of Object.keys(nostr)) {
     const n = Number(k);
     result[n] = Math.max(result[n] ?? 0, nostr[n]);
+  }
+  return result;
+}
+
+// Subtract confirmed sales from merged ownership.
+// soldCounts[num] = how many times the current user has sold sticker `num`.
+// This corrects mergeOwn when local cache is stale (higher than Nostr after a sale).
+function subtractSales(merged: Ownership, soldCounts: Record<number, number>): Ownership {
+  if (Object.keys(soldCounts).length === 0) return merged;
+  const result = { ...merged };
+  for (const k of Object.keys(soldCounts)) {
+    const n = Number(k);
+    result[n] = Math.max(0, (result[n] ?? 0) - soldCounts[n]);
   }
   return result;
 }
@@ -70,13 +57,17 @@ export function useGameState(pubkey: string | null) {
   const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasClaimedFreePack, setHasClaimedFreePack] = useState(false);
-  const ownEvents = useRef<Event[]>([]);
+  const ownEvents    = useRef<Event[]>([]);
   const listingEvents = useRef<Event[]>([]);
+  // Track how many of each sticker the current user has sold (confirmed by settlement events).
+  // Subtracted from the merged ownership so stale local cache doesn't show sold stickers.
+  const soldCounts = useRef<Record<number, number>>({});
 
   useEffect(() => {
-    // Reset state immediately when account changes so previous account's data
-    // never flashes on screen for the new account.
+    // Reset all refs when account changes
     ownEvents.current = [];
+    soldCounts.current = {};
+
     if (pubkey) {
       setOwnership(readLocalOwn(pubkey));
       setHasClaimedFreePack(isLocalClaimed(pubkey));
@@ -103,7 +94,7 @@ export function useGameState(pubkey: string | null) {
         ]);
         if (!cancelled) {
           ownEvents.current = owns;
-          setOwnership(mergeOwn(parseOwnership(owns), readLocalOwn(pubkey)));
+          setOwnership(subtractSales(mergeOwn(parseOwnership(owns), readLocalOwn(pubkey)), soldCounts.current));
           const claimed = grants.length > 0 || freeClaims.length > 0 || isLocalClaimed(pubkey);
           setHasClaimedFreePack(claimed);
           if (claimed) {
@@ -123,16 +114,22 @@ export function useGameState(pubkey: string | null) {
         const parsedSt = st.map(parseSettlement).filter((s): s is Settlement => s !== null);
         setSettlements(parsedSt);
 
-        // If we're the seller in any historical settlement, decrement local cache
         if (pubkey) {
-          let localChanged = false;
+          // Rebuild sold counts from all historical settlements where we're the seller
+          const counts: Record<number, number> = {};
           for (const s of parsedSt) {
             if (s.from === pubkey) {
-              if (applySellerDecrement(pubkey, s.stickerNum, s.id)) localChanged = true;
+              counts[s.stickerNum] = (counts[s.stickerNum] ?? 0) + 1;
             }
           }
-          if (localChanged) {
-            setOwnership(mergeOwn(parseOwnership(ownEvents.current), readLocalOwn(pubkey)));
+          soldCounts.current = counts;
+
+          if (Object.keys(counts).length > 0) {
+            // Re-apply ownership with sold counts subtracted
+            setOwnership(subtractSales(
+              mergeOwn(parseOwnership(ownEvents.current), readLocalOwn(pubkey)),
+              counts
+            ));
           }
         }
       }
@@ -145,7 +142,10 @@ export function useGameState(pubkey: string | null) {
             [{ kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY], "#p": [pubkey] }],
             (ev) => {
               ownEvents.current = [...ownEvents.current, ev];
-              setOwnership(mergeOwn(parseOwnership(ownEvents.current), readLocalOwn(pubkey)));
+              setOwnership(subtractSales(
+                mergeOwn(parseOwnership(ownEvents.current), readLocalOwn(pubkey)),
+                soldCounts.current
+              ));
             }
           )
         );
@@ -162,13 +162,16 @@ export function useGameState(pubkey: string | null) {
           if (s) {
             setSettlements((prev) => [s, ...prev]);
             if (pubkey && s.from === pubkey) {
-              if (applySellerDecrement(pubkey, s.stickerNum, s.id)) {
-                setOwnership(prev => {
-                  const next = { ...prev };
-                  next[s.stickerNum] = Math.max(0, (next[s.stickerNum] ?? 0) - 1);
-                  return next;
-                });
-              }
+              // Update soldCounts ref and subtract from ownership state
+              soldCounts.current = {
+                ...soldCounts.current,
+                [s.stickerNum]: (soldCounts.current[s.stickerNum] ?? 0) + 1,
+              };
+              setOwnership(prev => {
+                const next = { ...prev };
+                next[s.stickerNum] = Math.max(0, (next[s.stickerNum] ?? 0) - 1);
+                return next;
+              });
             }
           }
         })
@@ -190,7 +193,7 @@ export function useGameState(pubkey: string | null) {
       { kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY], "#p": [pubkey] },
     ]);
     ownEvents.current = owns;
-    setOwnership(mergeOwn(parseOwnership(owns), readLocalOwn(pubkey)));
+    setOwnership(subtractSales(mergeOwn(parseOwnership(owns), readLocalOwn(pubkey)), soldCounts.current));
   }, [pubkey]);
 
   const claimPack = useCallback((nums: number[]) => {
