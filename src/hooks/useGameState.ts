@@ -12,12 +12,20 @@ import {
 import type { Listing, Ownership, Settlement } from "@/lib/types";
 import { ALL_NUMBERS } from "@/lib/catalog";
 
-const LOCAL_OWN_KEY = "figus_local_own";
-const LOCAL_CLAIMED_KEY = "figus_local_claimed";
+const ownKey     = (pk: string) => `figus_own_${pk}`;
+const claimedKey = (pk: string) => `figus_claimed_${pk}`;
 
-function readLocalOwn(): Ownership {
-  try { return JSON.parse(localStorage.getItem(LOCAL_OWN_KEY) ?? "{}") ?? {}; }
+function readLocalOwn(pubkey: string): Ownership {
+  try { return JSON.parse(localStorage.getItem(ownKey(pubkey)) ?? "{}") ?? {}; }
   catch { return {}; }
+}
+
+function writeLocalOwn(pubkey: string, own: Ownership) {
+  try { localStorage.setItem(ownKey(pubkey), JSON.stringify(own)); } catch {}
+}
+
+function isLocalClaimed(pubkey: string): boolean {
+  try { return !!localStorage.getItem(claimedKey(pubkey)); } catch { return false; }
 }
 
 // Take the higher count per sticker from both sources
@@ -31,19 +39,26 @@ function mergeOwn(nostr: Ownership, local: Ownership): Ownership {
 }
 
 export function useGameState(pubkey: string | null) {
-  const [ownership, setOwnership] = useState<Ownership>(() => readLocalOwn());
+  const [ownership, setOwnership] = useState<Ownership>({});
   const [listings, setListings] = useState<Listing[]>([]);
   const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [loading, setLoading] = useState(true);
-  const [hasClaimedFreePack, setHasClaimedFreePack] = useState<boolean>(() => {
-    try { return !!localStorage.getItem(LOCAL_CLAIMED_KEY); }
-    catch { return false; }
-  });
+  const [hasClaimedFreePack, setHasClaimedFreePack] = useState(false);
   const ownEvents = useRef<Event[]>([]);
   const listingEvents = useRef<Event[]>([]);
 
-  // Carga inicial + suscripciones vivas
   useEffect(() => {
+    // Reset state immediately when account changes so previous account's data
+    // never flashes on screen for the new account.
+    ownEvents.current = [];
+    if (pubkey) {
+      setOwnership(readLocalOwn(pubkey));
+      setHasClaimedFreePack(isLocalClaimed(pubkey));
+    } else {
+      setOwnership({});
+      setHasClaimedFreePack(false);
+    }
+
     if (!ISSUER_PUBKEY) {
       setLoading(false);
       return;
@@ -54,7 +69,6 @@ export function useGameState(pubkey: string | null) {
     (async () => {
       setLoading(true);
 
-      // Mi colección + detección de sobre gratis
       if (pubkey) {
         const [owns, grants, freeClaims] = await Promise.all([
           list([{ kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY], "#p": [pubkey] }]),
@@ -63,21 +77,21 @@ export function useGameState(pubkey: string | null) {
         ]);
         if (!cancelled) {
           ownEvents.current = owns;
-          setOwnership(mergeOwn(parseOwnership(owns), readLocalOwn()));
-          const claimed = grants.length > 0 || freeClaims.length > 0 || !!localStorage.getItem(LOCAL_CLAIMED_KEY);
+          setOwnership(mergeOwn(parseOwnership(owns), readLocalOwn(pubkey)));
+          const claimed = grants.length > 0 || freeClaims.length > 0 || isLocalClaimed(pubkey);
           setHasClaimedFreePack(claimed);
-          if (claimed) localStorage.setItem(LOCAL_CLAIMED_KEY, "1");
+          if (claimed) {
+            try { localStorage.setItem(claimedKey(pubkey), "1"); } catch {}
+          }
         }
       }
 
-      // Ofertas abiertas del mercadito
       const ls = await list([{ kinds: [KIND.LISTING] }]);
       if (!cancelled) {
         listingEvents.current = ls;
         setListings(parseListings(ls).filter((l) => l.status === "open"));
       }
 
-      // Settlements recientes
       const st = await list([{ kinds: [KIND.SETTLEMENT], authors: [ISSUER_PUBKEY] }]);
       if (!cancelled) {
         setSettlements(
@@ -87,14 +101,13 @@ export function useGameState(pubkey: string | null) {
 
       if (!cancelled) setLoading(false);
 
-      // --- live subscriptions ---
       if (pubkey) {
         unsubs.push(
           subscribe(
             [{ kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY], "#p": [pubkey] }],
             (ev) => {
               ownEvents.current = [...ownEvents.current, ev];
-              setOwnership(mergeOwn(parseOwnership(ownEvents.current), readLocalOwn()));
+              setOwnership(mergeOwn(parseOwnership(ownEvents.current), readLocalOwn(pubkey)));
             }
           )
         );
@@ -128,25 +141,24 @@ export function useGameState(pubkey: string | null) {
       { kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY], "#p": [pubkey] },
     ]);
     ownEvents.current = owns;
-    setOwnership(mergeOwn(parseOwnership(owns), readLocalOwn()));
+    setOwnership(mergeOwn(parseOwnership(owns), readLocalOwn(pubkey)));
   }, [pubkey]);
 
-  // Saves stickers locally (used for free-pack fallback and penalty goal reward).
-  // Immediately updates state + persists to localStorage so stickers survive reload.
   const claimPack = useCallback((nums: number[]) => {
+    if (!pubkey) return;
     setHasClaimedFreePack(true);
     try {
-      localStorage.setItem(LOCAL_CLAIMED_KEY, "1");
-      const local = readLocalOwn();
+      localStorage.setItem(claimedKey(pubkey), "1");
+      const local = readLocalOwn(pubkey);
       for (const n of nums) local[n] = (local[n] ?? 0) + 1;
-      localStorage.setItem(LOCAL_OWN_KEY, JSON.stringify(local));
+      writeLocalOwn(pubkey, local);
       setOwnership(prev => {
         const next = { ...prev };
         for (const n of nums) next[n] = (next[n] ?? 0) + 1;
         return next;
       });
     } catch {}
-  }, []);
+  }, [pubkey]);
 
   return { ownership, listings, settlements, owned, dupes, loading, refresh, albumId: ALBUM_ID, hasClaimedFreePack, claimPack };
 }

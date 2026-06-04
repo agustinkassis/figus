@@ -66,7 +66,7 @@ function HomeInner() {
   const configured = Boolean(ISSUER_PUBKEY);
 
   // --- sobre de regalo: publica prueba en Nostr y espera GRANT del issuer ---
-  async function openFreePack() {
+  function openFreePack() {
     if (!identity) return notify("Conectate primero");
     setBusy(true);
 
@@ -75,25 +75,6 @@ function HomeInner() {
     let unsubGrant: (() => void) | null = null;
     let pollIv: ReturnType<typeof setInterval> | null = null;
     let freeTimeout: ReturnType<typeof setTimeout> | null = null;
-
-    // 1. Publicar prueba de claim (kind:30110, firmada por el usuario, queda en relays)
-    try {
-      const claimTemplate: EventTemplate = {
-        kind: KIND.FREE_PACK_CLAIM,
-        created_at: since,
-        content: "",
-        tags: [
-          ["d", `free-pack:${ALBUM_ID}`],
-          ["a", addr(KIND.ALBUM, ISSUER_PUBKEY, ALBUM_ID)],
-          ["figus-action", "free-pack-claim"],
-        ],
-      };
-      const claimEv = await signEvent(claimTemplate, identity.mode);
-      await Promise.any(getPool().publish(getRelays(), claimEv));
-    } catch {
-      // Si falla la publicación del claim se continúa igual; el GRANT del issuer
-      // también sirve como prueba de que ya lo reclamó.
-    }
 
     function handleGrant(ev: { created_at: number; tags: string[][] }) {
       if (grantReceived) return;
@@ -113,7 +94,8 @@ function HomeInner() {
       setBusy(false);
     }
 
-    // 2. Suscripción en vivo esperando el GRANT del issuer
+    // 1. Suscripción en vivo esperando el GRANT del issuer (se setea antes del await
+    //    para que el fallback funcione aunque el signing de Amber no responda)
     unsubGrant = subscribeOne(
       { kinds: [KIND.GRANT], authors: [ISSUER_PUBKEY], "#p": [identity.pubkey], since },
       handleGrant
@@ -130,7 +112,7 @@ function HomeInner() {
       if (evs.length) handleGrant(evs[0]);
     }, 5000);
 
-    // 3. Fallback demo si el issuer no responde en 15s
+    // 2. Fallback: si el issuer no responde en 15s, dar figus localmente
     freeTimeout = setTimeout(() => {
       if (!grantReceived) {
         unsubGrant?.();
@@ -142,6 +124,22 @@ function HomeInner() {
         notify("🎁 Sobre de regalo abierto · el issuer confirmará las figuritas pronto");
       }
     }, 15000);
+
+    // 3. Publicar prueba de claim (fire-and-forget: no bloqueamos el flujo
+    //    porque signEvent con Amber puede necesitar interacción del usuario)
+    const claimTemplate: EventTemplate = {
+      kind: KIND.FREE_PACK_CLAIM,
+      created_at: since,
+      content: "",
+      tags: [
+        ["d", `free-pack:${ALBUM_ID}`],
+        ["a", addr(KIND.ALBUM, ISSUER_PUBKEY, ALBUM_ID)],
+        ["figus-action", "free-pack-claim"],
+      ],
+    };
+    signEvent(claimTemplate, identity.mode)
+      .then(claimEv => Promise.any(getPool().publish(getRelays(), claimEv)))
+      .catch(() => {});
   }
 
   // --- abrir sobre demo: genera figus localmente sin Lightning (para testear) ---

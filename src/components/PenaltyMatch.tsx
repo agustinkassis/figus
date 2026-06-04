@@ -2,11 +2,30 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { nip19, nip05 } from "nostr-tools";
 import type { Identity } from "@/lib/identity";
 import { ZONE_POS, KEEPER_LEFT, ARROWS } from "@/lib/penalty";
 import type { MatchState, Round } from "@/lib/penalty";
 import type { PenaltyMatch as PenaltyMatchType } from "@/lib/penalty";
 import { usePenaltyMatch, useOpenMatches, createMatch, cancelMatch } from "@/hooks/usePenaltyMatch";
+
+async function resolveInputToPubkey(input: string): Promise<string> {
+  const s = input.trim();
+  if (s.startsWith("npub1")) {
+    try {
+      const decoded = nip19.decode(s);
+      if (decoded.type === "npub") return decoded.data as string;
+    } catch {}
+    throw new Error("npub inválido");
+  }
+  if (/^[0-9a-f]{64}$/i.test(s)) return s.toLowerCase();
+  if (s.includes("@") || (!s.includes(" ") && s.includes("."))) {
+    const pointer = await nip05.queryProfile(s);
+    if (pointer?.pubkey) return pointer.pubkey;
+    throw new Error("NIP-05 no encontrado — revisá que esté bien escrito");
+  }
+  throw new Error("Formato inválido · usá npub1…, pubkey hex o usuario@dominio");
+}
 
 // ─── Shared visual: goal net + keeper + ball ──────────────────────────────────
 
@@ -468,14 +487,25 @@ export function PenaltyMatchLobby({
   const [inputPk, setInputPk]           = useState("");
   const [inputRounds, setInputRounds]   = useState("3");
   const [publishing, setPublishing]     = useState(false);
+  const [resolving, setResolving]       = useState(false);
   const [error, setError]               = useState<string | null>(null);
 
   async function handleCreate() {
     if (!identity || !inputPk.trim()) return;
     setError(null);
+    let resolvedPk: string;
+    try {
+      setResolving(true);
+      resolvedPk = await resolveInputToPubkey(inputPk);
+    } catch (e: any) {
+      setError(e.message || "Identidad inválida");
+      return;
+    } finally {
+      setResolving(false);
+    }
     setPublishing(true);
     try {
-      await createMatch(identity, inputPk.trim(), Number(inputRounds) || 3);
+      await createMatch(identity, resolvedPk, Number(inputRounds) || 3);
       setInputPk("");
       setChallenging(false);
     } catch {
@@ -525,13 +555,13 @@ export function PenaltyMatchLobby({
           borderRadius: 12, padding: "14px 16px", marginBottom: 14,
         }}>
           <div style={{ fontSize: 10, color: "var(--muted)", letterSpacing: 0.5, marginBottom: 6 }}>
-            NPUB O HEX DEL RIVAL
+            NPUB, HEX O NIP-05 DEL RIVAL
           </div>
           <textarea
             autoFocus
             value={inputPk}
             onChange={e => { setInputPk(e.target.value); setError(null); }}
-            placeholder="npub1… o hex"
+            placeholder="npub1… · hex · usuario@dominio.com"
             rows={2}
             style={{
               width: "100%", background: "var(--panel2)",
@@ -561,15 +591,15 @@ export function PenaltyMatchLobby({
           <div style={{ display: "flex", gap: 8 }}>
             <button
               onClick={handleCreate}
-              disabled={!inputPk.trim() || publishing}
+              disabled={!inputPk.trim() || publishing || resolving}
               style={{
                 flex: 1, background: "var(--fifa-blue)", color: "#fff", border: "none",
                 padding: "9px 0", borderRadius: 8, fontWeight: 900, fontSize: 12,
-                cursor: inputPk.trim() && !publishing ? "pointer" : "not-allowed",
-                opacity: inputPk.trim() && !publishing ? 1 : 0.5,
+                cursor: inputPk.trim() && !publishing && !resolving ? "pointer" : "not-allowed",
+                opacity: inputPk.trim() && !publishing && !resolving ? 1 : 0.5,
               }}
             >
-              {publishing ? "Publicando…" : "DESAFIAR"}
+              {resolving ? "Buscando…" : publishing ? "Publicando…" : "DESAFIAR"}
             </button>
             <button
               onClick={() => { setChallenging(false); setInputPk(""); setError(null); }}
