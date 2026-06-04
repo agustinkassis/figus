@@ -12,8 +12,9 @@ import {
 import type { Listing, Ownership, Settlement } from "@/lib/types";
 import { ALL_NUMBERS } from "@/lib/catalog";
 
-const ownKey     = (pk: string) => `figus_own_${pk}`;
-const claimedKey = (pk: string) => `figus_claimed_${pk}`;
+const ownKey      = (pk: string) => `figus_own_${pk}`;
+const claimedKey  = (pk: string) => `figus_claimed_${pk}`;
+const soldKey     = (pk: string) => `figus_sold_${pk}`;
 
 function readLocalOwn(pubkey: string): Ownership {
   try { return JSON.parse(localStorage.getItem(ownKey(pubkey)) ?? "{}") ?? {}; }
@@ -26,6 +27,31 @@ function writeLocalOwn(pubkey: string, own: Ownership) {
 
 function isLocalClaimed(pubkey: string): boolean {
   try { return !!localStorage.getItem(claimedKey(pubkey)); } catch { return false; }
+}
+
+function getAppliedSales(pubkey: string): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(soldKey(pubkey)) ?? "[]")); }
+  catch { return new Set(); }
+}
+
+function markSaleApplied(pubkey: string, id: string) {
+  try {
+    const s = getAppliedSales(pubkey);
+    s.add(id);
+    localStorage.setItem(soldKey(pubkey), JSON.stringify([...s]));
+  } catch {}
+}
+
+function applySellerDecrement(pubkey: string, stickerNum: number, settlementId: string): boolean {
+  const applied = getAppliedSales(pubkey);
+  if (applied.has(settlementId)) return false;
+  const local = readLocalOwn(pubkey);
+  if ((local[stickerNum] ?? 0) > 0) {
+    local[stickerNum] = Math.max(0, (local[stickerNum] ?? 0) - 1);
+    writeLocalOwn(pubkey, local);
+  }
+  markSaleApplied(pubkey, settlementId);
+  return true;
 }
 
 // Take the higher count per sticker from both sources
@@ -94,9 +120,21 @@ export function useGameState(pubkey: string | null) {
 
       const st = await list([{ kinds: [KIND.SETTLEMENT], authors: [ISSUER_PUBKEY] }]);
       if (!cancelled) {
-        setSettlements(
-          st.map(parseSettlement).filter((s): s is Settlement => s !== null)
-        );
+        const parsedSt = st.map(parseSettlement).filter((s): s is Settlement => s !== null);
+        setSettlements(parsedSt);
+
+        // If we're the seller in any historical settlement, decrement local cache
+        if (pubkey) {
+          let localChanged = false;
+          for (const s of parsedSt) {
+            if (s.from === pubkey) {
+              if (applySellerDecrement(pubkey, s.stickerNum, s.id)) localChanged = true;
+            }
+          }
+          if (localChanged) {
+            setOwnership(mergeOwn(parseOwnership(ownEvents.current), readLocalOwn(pubkey)));
+          }
+        }
       }
 
       if (!cancelled) setLoading(false);
@@ -121,7 +159,18 @@ export function useGameState(pubkey: string | null) {
       unsubs.push(
         subscribe([{ kinds: [KIND.SETTLEMENT], authors: [ISSUER_PUBKEY] }], (ev) => {
           const s = parseSettlement(ev);
-          if (s) setSettlements((prev) => [s, ...prev]);
+          if (s) {
+            setSettlements((prev) => [s, ...prev]);
+            if (pubkey && s.from === pubkey) {
+              if (applySellerDecrement(pubkey, s.stickerNum, s.id)) {
+                setOwnership(prev => {
+                  const next = { ...prev };
+                  next[s.stickerNum] = Math.max(0, (next[s.stickerNum] ?? 0) - 1);
+                  return next;
+                });
+              }
+            }
+          }
         })
       );
     })();

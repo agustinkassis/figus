@@ -1,13 +1,20 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { createPortal } from "react-dom";
+import dynamic from "next/dynamic";
 import { nip19, nip05 } from "nostr-tools";
 import type { Identity } from "@/lib/identity";
-import { ZONE_POS, KEEPER_LEFT, ARROWS } from "@/lib/penalty";
+import { ARROWS } from "@/lib/penalty";
 import type { MatchState, Round } from "@/lib/penalty";
 import type { PenaltyMatch as PenaltyMatchType } from "@/lib/penalty";
 import { usePenaltyMatch, useOpenMatches, createMatch, cancelMatch } from "@/hooks/usePenaltyMatch";
+
+const PenaltyScene3D = dynamic(() => import("@/components/PenaltyScene3D"), {
+  ssr: false,
+  loading: () => (
+    <div style={{ height: 320, background: "#0d1a0d", borderRadius: 14 }} />
+  ),
+});
 
 async function fetchNostrMeta(pubkey: string): Promise<{ name?: string; picture?: string }> {
   try {
@@ -17,66 +24,6 @@ async function fetchNostrMeta(pubkey: string): Promise<{ name?: string; picture?
     const m = JSON.parse(evs[0].content);
     return { name: m.name || m.display_name || m.username, picture: m.picture };
   } catch { return {}; }
-}
-
-// ─── Shared visual: goal net + keeper + ball ──────────────────────────────────
-
-function GoalNet({
-  keeperCol,
-  ballZone,
-  phase,
-  isGoal,
-}: {
-  keeperCol: number;
-  ballZone: number | null;
-  phase: "idle" | "aiming" | "result";
-  isGoal: boolean | null;
-}) {
-  const [bx, by] = ballZone !== null ? ZONE_POS[ballZone] : [50, 50];
-
-  return (
-    <div style={{
-      position: "relative", height: 110,
-      background: "rgba(255,255,255,.06)",
-      border: "2.5px solid rgba(255,255,255,.75)",
-      borderBottom: "none",
-      borderRadius: "8px 8px 0 0",
-      overflow: "hidden",
-    }}>
-      {/* Net lines */}
-      <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.14, pointerEvents: "none" }}>
-        {[10,20,30,40,50,60,70,80,90].map(x => (
-          <line key={`v${x}`} x1={`${x}%`} y1="0" x2={`${x}%`} y2="100%" stroke="white" strokeWidth="0.8" />
-        ))}
-        {[25, 50, 75].map(y => (
-          <line key={`h${y}`} x1="0" y1={`${y}%`} x2="100%" y2={`${y}%`} stroke="white" strokeWidth="0.8" />
-        ))}
-      </svg>
-
-      {/* Keeper */}
-      <div style={{
-        position: "absolute", bottom: 2,
-        left: `${KEEPER_LEFT[keeperCol]}%`,
-        transform: "translateX(-50%)",
-        transition: "left 0.45s cubic-bezier(.25,.46,.45,.94)",
-        fontSize: 36, lineHeight: 1,
-        filter: "drop-shadow(0 2px 6px rgba(0,0,0,.8))",
-        zIndex: 2,
-      }}>🧤</div>
-
-      {/* Ball */}
-      {phase === "result" && ballZone !== null && (
-        <div style={{
-          position: "absolute",
-          left: `${bx}%`, top: `${by}%`,
-          transform: "translate(-50%, -50%)",
-          fontSize: 24, zIndex: 3,
-          animation: "pop .35s cubic-bezier(.34,1.56,.64,1) both",
-          filter: isGoal ? "drop-shadow(0 0 14px rgba(255,255,200,.9))" : undefined,
-        }}>⚽</div>
-      )}
-    </div>
-  );
 }
 
 // ─── Aim grid: el pateador elige zona ─────────────────────────────────────────
@@ -204,151 +151,6 @@ function Scoreboard({
   );
 }
 
-// ─── Vista de una ronda resuelta ──────────────────────────────────────────────
-
-function RoundResult({ round }: { round: Round }) {
-  if (!round.reveal || !round.block) return null;
-  const isGoal = round.result === "goal";
-  const isCheat = round.result === "cheat";
-  const [bx, by] = ZONE_POS[round.reveal.zone];
-
-  return (
-    <div style={{ marginBottom: 8 }}>
-      <div style={{
-        background: "linear-gradient(175deg, #1b5e20 0%, #2e7d32 45%, #388e3c 100%)",
-        borderRadius: 14, padding: "12px 14px 10px",
-        border: "2px solid rgba(255,255,255,0.12)",
-        boxShadow: "inset 0 -4px 0 rgba(0,0,0,.35)",
-      }}>
-        <GoalNet
-          keeperCol={round.block.col}
-          ballZone={round.reveal.zone}
-          phase="result"
-          isGoal={isGoal}
-        />
-        <div style={{ position: "relative", height: 16, marginBottom: 6 }}>
-          <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.25, pointerEvents: "none" }}>
-            <line x1="0" y1="50%" x2="100%" y2="50%" stroke="white" strokeWidth="1" />
-          </svg>
-          <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", width: 5, height: 5, borderRadius: "50%", background: "rgba(255,255,255,.5)" }} />
-        </div>
-        <div style={{ textAlign: "center", paddingTop: 4 }}>
-          {isCheat ? (
-            <div style={{ fontSize: 14, fontWeight: 900, color: "#cc2244", fontFamily: "var(--condensed)" }}>
-              ⚠️ TRAMPA DETECTADA — reveal no matchea commit
-            </div>
-          ) : isGoal ? (
-            <div style={{ fontSize: 18, fontWeight: 900, color: "#fff", textShadow: "0 0 20px rgba(255,255,200,.8)", fontFamily: "var(--condensed)" }}>
-              ⚽ GOOOL!
-            </div>
-          ) : (
-            <div style={{ fontSize: 18, fontWeight: 900, color: "#ff8a80", fontFamily: "var(--condensed)" }}>
-              🧤 ¡Atajado!
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Vista activa de una ronda ────────────────────────────────────────────────
-
-function ActiveRound({
-  state,
-  myPubkey,
-  publishing,
-  onKick,
-  onBlock,
-  onReveal,
-  pendingZone,
-  setPendingZone,
-}: {
-  state: MatchState;
-  myPubkey: string;
-  publishing: boolean;
-  onKick: (zone: number) => void;
-  onBlock: (col: number) => void;
-  onReveal: () => void;
-  pendingZone: number | null;
-  setPendingZone: (z: number) => void;
-}) {
-  const { phase, currentRound, rounds } = state;
-  const round = rounds[currentRound - 1];
-  if (!round) return null;
-
-  const iAmKicker     = myPubkey === round.kicker;
-  const iAmGoalkeeper = myPubkey === round.goalkeeper;
-
-  // Keeper col a mostrar en el arco mientras se juega
-  const keeperCol = round.block?.col ?? 1;
-  const ballZone  = phase === "waiting_reveal" && pendingZone !== null ? pendingZone : null;
-
-  return (
-    <div style={{
-      background: "linear-gradient(175deg, #1b5e20 0%, #2e7d32 45%, #388e3c 100%)",
-      borderRadius: 14, padding: "16px 14px 14px",
-      border: "2px solid rgba(255,255,255,0.12)",
-      boxShadow: "inset 0 -4px 0 rgba(0,0,0,.35), 0 8px 28px rgba(0,0,0,.55)",
-    }}>
-      <GoalNet keeperCol={keeperCol} ballZone={ballZone} phase="idle" isGoal={null} />
-
-      {/* Penalty spot line */}
-      <div style={{ position: "relative", height: 20, marginBottom: 8 }}>
-        <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", width: 6, height: 6, borderRadius: "50%", background: "rgba(255,255,255,.5)" }} />
-        <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.25, pointerEvents: "none" }}>
-          <line x1="0" y1="50%" x2="100%" y2="50%" stroke="white" strokeWidth="1" />
-        </svg>
-      </div>
-
-      {/* Status + acciones */}
-      {phase === "waiting_commit" && iAmKicker && (
-        <AimGrid onKick={(z) => { setPendingZone(z); onKick(z); }} disabled={publishing} />
-      )}
-      {phase === "waiting_commit" && !iAmKicker && (
-        <div style={{ textAlign: "center", color: "rgba(255,255,255,.5)", fontSize: 12, padding: "10px 0", fontFamily: "var(--condensed)", fontWeight: 700 }}>
-          Esperando que el pateador elija zona…
-        </div>
-      )}
-
-      {phase === "waiting_block" && iAmGoalkeeper && (
-        <KeeperGrid onBlock={(col) => onBlock(col)} disabled={publishing} />
-      )}
-      {phase === "waiting_block" && !iAmGoalkeeper && (
-        <div style={{ textAlign: "center", color: "rgba(255,255,255,.5)", fontSize: 12, padding: "10px 0", fontFamily: "var(--condensed)", fontWeight: 700 }}>
-          El arquero está eligiendo hacia dónde tirarse… 🧤
-        </div>
-      )}
-
-      {phase === "waiting_reveal" && iAmKicker && (
-        <div style={{ textAlign: "center", padding: "8px 0" }}>
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,.5)", marginBottom: 8, fontFamily: "var(--condensed)" }}>
-            El arquero ya eligió. ¡Revelá tu zona!
-          </div>
-          <button
-            onClick={onReveal}
-            disabled={publishing}
-            style={{
-              background: "var(--gold)", color: "#030b18",
-              border: "none", padding: "10px 24px", borderRadius: 8,
-              fontWeight: 900, fontSize: 13, fontFamily: "var(--condensed)",
-              cursor: publishing ? "not-allowed" : "pointer",
-              opacity: publishing ? 0.6 : 1,
-            }}
-          >
-            {publishing ? "Publicando…" : "⚡ REVELAR ZONA"}
-          </button>
-        </div>
-      )}
-      {phase === "waiting_reveal" && !iAmKicker && (
-        <div style={{ textAlign: "center", color: "rgba(255,255,255,.5)", fontSize: 12, padding: "10px 0", fontFamily: "var(--condensed)", fontWeight: 700 }}>
-          Esperando que el pateador revele la zona… ⏳
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export function PenaltyMatchView({
@@ -364,7 +166,44 @@ export function PenaltyMatchView({
   const { state, publishing, publishCommit, publishBlock, publishReveal } = usePenaltyMatch(match, identity);
   const [pendingZone, setPendingZone] = useState<number | null>(null);
 
+  // 3D scene state
+  const [scenePhase, setScenePhase] = useState<"aim" | "flying" | "result">("aim");
+  const [sceneZone, setSceneZone] = useState<number | null>(null);
+  const [sceneKeeperCol, setSceneKeeperCol] = useState(1);
+  const [sceneIsGoal, setSceneIsGoal] = useState(false);
+
   const shortName = useCallback((pk: string) => pk.slice(0, 8) + "…", []);
+
+  const { phase, rounds } = state ?? { phase: "waiting_commit" as const, rounds: [] };
+  const completedRounds = rounds.filter(r => r.result !== null);
+  const lastCompleted   = completedRounds[completedRounds.length - 1] ?? null;
+
+  // Trigger 3D animation when a round completes
+  useEffect(() => {
+    if (!lastCompleted?.reveal) {
+      setScenePhase("aim");
+      setSceneZone(null);
+      return;
+    }
+    setSceneZone(lastCompleted.reveal.zone);
+    setSceneKeeperCol(lastCompleted.block?.col ?? 1);
+    setSceneIsGoal(lastCompleted.result === "goal");
+    setScenePhase("flying");
+    const t = setTimeout(() => setScenePhase("result"), 900);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastCompleted?.number]);
+
+  // Reset to aim when new round starts
+  useEffect(() => {
+    if (phase === "waiting_commit" && lastCompleted) {
+      const t = setTimeout(() => {
+        setScenePhase("aim");
+        setSceneZone(null);
+      }, 1800);
+      return () => clearTimeout(t);
+    }
+  }, [phase, lastCompleted?.number]);
 
   const handleKick = useCallback(async (zone: number) => {
     setPendingZone(zone);
@@ -392,14 +231,14 @@ export function PenaltyMatchView({
     );
   }
 
-  const { phase, rounds } = state;
-  const completedRounds = rounds.filter(r => r.result !== null);
-  const lastCompleted   = completedRounds[completedRounds.length - 1] ?? null;
+  const currentRound = rounds[state.currentRound - 1];
+  const iAmKicker     = myPubkey === currentRound?.kicker;
+  const iAmGoalkeeper = myPubkey === currentRound?.goalkeeper;
 
   return (
     <div style={{ fontFamily: "var(--condensed)" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
         <button
           onClick={onBack}
           style={{ background: "transparent", border: "1px solid var(--line)", color: "var(--muted)", padding: "5px 10px", borderRadius: 7, fontSize: 11, cursor: "pointer" }}
@@ -411,24 +250,94 @@ export function PenaltyMatchView({
         </div>
       </div>
 
+      {/* 3D Scene */}
+      <div style={{ borderRadius: 14, overflow: "hidden", boxShadow: "0 8px 28px rgba(0,0,0,.55)", marginBottom: 10 }}>
+        <PenaltyScene3D
+          phase={scenePhase}
+          zone={sceneZone}
+          keeperCol={sceneKeeperCol}
+          isGoal={sceneIsGoal}
+        />
+      </div>
+
       {/* Marcador */}
       <Scoreboard state={state} myPubkey={myPubkey} shortName={shortName} />
 
-      {/* Última ronda resuelta */}
-      {lastCompleted && <RoundResult round={lastCompleted} />}
+      {/* Resultado de última ronda */}
+      {lastCompleted && scenePhase !== "aim" && (
+        <div style={{
+          textAlign: "center", padding: "8px 0 4px",
+          animation: "pop .35s cubic-bezier(.34,1.56,.64,1) both",
+        }}>
+          {lastCompleted.result === "cheat" ? (
+            <div style={{ fontSize: 14, fontWeight: 900, color: "#cc2244", fontFamily: "var(--condensed)" }}>
+              ⚠️ TRAMPA DETECTADA
+            </div>
+          ) : lastCompleted.result === "goal" ? (
+            <div style={{ fontSize: 22, fontWeight: 900, color: "#fff", textShadow: "0 0 20px rgba(255,255,200,.8)", fontFamily: "var(--condensed)" }}>
+              ⚽ GOOOL!
+            </div>
+          ) : (
+            <div style={{ fontSize: 22, fontWeight: 900, color: "#ff8a80", fontFamily: "var(--condensed)" }}>
+              🧤 ¡Atajado!
+            </div>
+          )}
+        </div>
+      )}
 
-      {/* Ronda activa */}
+      {/* Controles de ronda activa */}
       {phase !== "finished" && (
-        <ActiveRound
-          state={state}
-          myPubkey={myPubkey}
-          publishing={publishing}
-          onKick={handleKick}
-          onBlock={handleBlock}
-          onReveal={handleReveal}
-          pendingZone={pendingZone}
-          setPendingZone={setPendingZone}
-        />
+        <div style={{
+          background: "linear-gradient(175deg, #1b5e20 0%, #2e7d32 45%, #388e3c 100%)",
+          borderRadius: 14, padding: "12px 14px",
+          marginTop: 8,
+          border: "2px solid rgba(255,255,255,0.12)",
+          boxShadow: "inset 0 -4px 0 rgba(0,0,0,.35)",
+        }}>
+          {phase === "waiting_commit" && iAmKicker && (
+            <AimGrid onKick={(z) => { setPendingZone(z); handleKick(z); }} disabled={publishing} />
+          )}
+          {phase === "waiting_commit" && !iAmKicker && (
+            <div style={{ textAlign: "center", color: "rgba(255,255,255,.5)", fontSize: 12, padding: "10px 0", fontFamily: "var(--condensed)", fontWeight: 700 }}>
+              Esperando que el pateador elija zona…
+            </div>
+          )}
+
+          {phase === "waiting_block" && iAmGoalkeeper && (
+            <KeeperGrid onBlock={(col) => handleBlock(col)} disabled={publishing} />
+          )}
+          {phase === "waiting_block" && !iAmGoalkeeper && (
+            <div style={{ textAlign: "center", color: "rgba(255,255,255,.5)", fontSize: 12, padding: "10px 0", fontFamily: "var(--condensed)", fontWeight: 700 }}>
+              El arquero está eligiendo hacia dónde tirarse… 🧤
+            </div>
+          )}
+
+          {phase === "waiting_reveal" && iAmKicker && (
+            <div style={{ textAlign: "center", padding: "8px 0" }}>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,.5)", marginBottom: 8, fontFamily: "var(--condensed)" }}>
+                El arquero ya eligió. ¡Revelá tu zona!
+              </div>
+              <button
+                onClick={handleReveal}
+                disabled={publishing}
+                style={{
+                  background: "var(--gold)", color: "#030b18",
+                  border: "none", padding: "10px 24px", borderRadius: 8,
+                  fontWeight: 900, fontSize: 13, fontFamily: "var(--condensed)",
+                  cursor: publishing ? "not-allowed" : "pointer",
+                  opacity: publishing ? 0.6 : 1,
+                }}
+              >
+                {publishing ? "Publicando…" : "⚡ REVELAR ZONA"}
+              </button>
+            </div>
+          )}
+          {phase === "waiting_reveal" && !iAmKicker && (
+            <div style={{ textAlign: "center", color: "rgba(255,255,255,.5)", fontSize: 12, padding: "10px 0", fontFamily: "var(--condensed)", fontWeight: 700 }}>
+              Esperando que el pateador revele la zona… ⏳
+            </div>
+          )}
+        </div>
       )}
 
       {/* Resultado final */}
@@ -619,7 +528,6 @@ export function PenaltyMatchLobby({
             }}
           />
 
-          {/* Estado de resolución */}
           {resolving && (
             <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 8 }}>Buscando…</div>
           )}
