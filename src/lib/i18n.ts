@@ -44,7 +44,7 @@ const T = {
     pack_paste:  "✅ PEGAR EN EL ÁLBUM",
 
     // Invoice modal
-    invoice_title:       "PAGAR SOBRE — 21 SATS",
+    invoice_title:       "FACTURA LIGHTNING",
     invoice_subtitle:    "Escaneá el QR con tu wallet Lightning o copiá la factura",
     invoice_generating:  "Generando QR…",
     invoice_copy:        "📋 COPIAR FACTURA",
@@ -204,7 +204,7 @@ const T = {
     pack_paste:  "✅ ADD TO ALBUM",
 
     // Invoice modal
-    invoice_title:       "PAY PACK — 21 SATS",
+    invoice_title:       "LIGHTNING INVOICE",
     invoice_subtitle:    "Scan the QR with your Lightning wallet or copy the invoice",
     invoice_generating:  "Generating QR…",
     invoice_copy:        "📋 COPY INVOICE",

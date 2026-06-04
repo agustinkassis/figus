@@ -160,5 +160,19 @@ export function useGameState(pubkey: string | null) {
     } catch {}
   }, [pubkey]);
 
-  return { ownership, listings, settlements, owned, dupes, loading, refresh, albumId: ALBUM_ID, hasClaimedFreePack, claimPack };
+  const addSticker = useCallback((num: number) => {
+    if (!pubkey) return;
+    try {
+      const local = readLocalOwn(pubkey);
+      local[num] = (local[num] ?? 0) + 1;
+      writeLocalOwn(pubkey, local);
+      setOwnership(prev => {
+        const next = { ...prev };
+        next[num] = (next[num] ?? 0) + 1;
+        return next;
+      });
+    } catch {}
+  }, [pubkey]);
+
+  return { ownership, listings, settlements, owned, dupes, loading, refresh, albumId: ALBUM_ID, hasClaimedFreePack, claimPack, addSticker };
 }

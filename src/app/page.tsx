@@ -42,7 +42,7 @@ function HomeInner() {
   const { identity, nip07Available, connectNip07, connectLocal, connectNip46QR, connectNip46Bunker, logout, importNsec } =
     useIdentity();
   const pubkey = identity?.pubkey ?? null;
-  const { ownership, listings, settlements, owned, dupes, loading, refresh, hasClaimedFreePack, claimPack } =
+  const { ownership, listings, settlements, owned, dupes, loading, refresh, hasClaimedFreePack, claimPack, addSticker } =
     useGameState(pubkey);
 
   const [tab, setTab] = useState<Tab>("album");
@@ -51,6 +51,7 @@ function HomeInner() {
   const [penaltyPackPending, setPenaltyPackPending] = useState(false);
   const [busy, setBusy] = useState(false);
   const [invoice, setInvoice] = useState<string | null>(null);
+  const [invoiceAmount, setInvoiceAmount] = useState<number>(0);
   const [showSettings, setShowSettings] = useState(false);
   const [activeMatch, setActiveMatch] = useState<PenaltyMatch | null>(null);
 
@@ -246,6 +247,7 @@ function HomeInner() {
             setInvoice(res.invoice);
           }
         } else {
+          setInvoiceAmount(21);
           setInvoice(res.invoice);
         }
       }
@@ -339,8 +341,6 @@ function HomeInner() {
     if (!identity) return notify("Conectate primero");
     setBusy(true);
     try {
-      // necesitamos la LN address del vendedor; en demo usamos su metadata kind:0.
-      // Para simplificar, asumimos que el vendedor publicó "lud16" en su perfil.
       const sellerLn = await resolveSellerLnAddress(listing.seller);
       const res = await zap(
         {
@@ -354,11 +354,15 @@ function HomeInner() {
           signerMode: identity.mode,
         },
         () => {
-          notify("⚡ Pago al vendedor confirmado — el issuer transferirá la figu…");
-          setTimeout(refresh, 1500);
+          // Pago confirmado: acreditar la figurita localmente de inmediato.
+          // El issuer publicará el OWNERSHIP en Nostr y mergeOwn lo reconciliará.
+          addSticker(listing.stickerNum);
+          notify(`✅ ¡Pago confirmado! La #${listing.stickerNum} fue acreditada a tu álbum`);
+          setTimeout(refresh, 3000);
         }
       );
       if (!res.paid) {
+        setInvoiceAmount(listing.price);
         setInvoice(res.invoice);
         notify("Escaneá el invoice para completar la compra");
       }
@@ -648,6 +652,7 @@ function HomeInner() {
       {invoice && (
         <InvoiceModal
           invoice={invoice}
+          amountSats={invoiceAmount}
           onClose={() => setInvoice(null)}
           onNwcPaid={() => setInvoice(null)}
           notify={notify}

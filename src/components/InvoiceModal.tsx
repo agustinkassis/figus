@@ -7,11 +7,13 @@ import { useLang } from "@/contexts/LangContext";
 
 export function InvoiceModal({
   invoice,
+  amountSats,
   onClose,
   onNwcPaid,
   notify,
 }: {
   invoice: string;
+  amountSats?: number;
   onClose: () => void;
   onNwcPaid: () => void;
   notify: (msg: string) => void;
@@ -91,6 +93,11 @@ export function InvoiceModal({
         <div style={{ fontSize: 10, fontFamily: "var(--condensed)", fontWeight: 900, letterSpacing: 2, color: "var(--gold)", marginBottom: 4 }}>
           {t.invoice_title}
         </div>
+        {amountSats && amountSats > 0 && (
+          <div style={{ fontSize: 28, fontWeight: 900, fontFamily: "var(--condensed)", color: "var(--gold)", lineHeight: 1, marginBottom: 4 }}>
+            ⚡ {amountSats} sats
+          </div>
+        )}
         <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 16px", fontFamily: "var(--condensed)" }}>
           {t.invoice_subtitle}
         </p>
