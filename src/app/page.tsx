@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { EventTemplate } from "nostr-tools";
 import { useIdentity } from "@/hooks/useIdentity";
 import { useGameState } from "@/hooks/useGameState";
@@ -48,10 +48,15 @@ function HomeInner() {
   const [tab, setTab] = useState<Tab>("album");
   const [toast, setToast] = useState<string | null>(null);
   const [packResult, setPackResult] = useState<number[] | null>(null);
+  const [penaltyPackPending, setPenaltyPackPending] = useState(false);
   const [busy, setBusy] = useState(false);
   const [invoice, setInvoice] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [activeMatch, setActiveMatch] = useState<PenaltyMatch | null>(null);
+
+  useEffect(() => {
+    if (packResult) setPenaltyPackPending(false);
+  }, [packResult]);
 
   const notify = (m: string) => {
     setToast(m);
@@ -603,8 +608,9 @@ function HomeInner() {
               <>
                 <PenaltyGame
                   pubkey={pubkey}
-                  onGoal={openFreePack}
+                  onGoal={() => { setPenaltyPackPending(true); openFreePack(); }}
                   onPublish={publishPenalty}
+                  packPending={penaltyPackPending}
                 />
                 <div style={{ borderTop: "1px solid var(--line)", paddingTop: 24 }}>
                   <PenaltyMatchLobby

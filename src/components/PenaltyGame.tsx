@@ -17,10 +17,12 @@ export function PenaltyGame({
   pubkey,
   onGoal,
   onPublish,
+  packPending,
 }: {
   pubkey: string | null;
   onGoal: () => void;
   onPublish: (result: "goal" | "save", zone: number, keeper: number, totalGoals: number) => void;
+  packPending?: boolean;
 }) {
   const [phase, setPhase]         = useState<Phase>("aim");
   const [zone, setZone]           = useState<number | null>(null);
@@ -156,9 +158,16 @@ export function PenaltyGame({
                 <div style={{ fontSize: 30, fontWeight: 900, color: "#fff", textShadow: "0 0 24px rgba(255,255,200,.7)", lineHeight: 1 }}>
                   GOOOOOL! ⚽
                 </div>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,.65)", marginTop: 5 }}>
-                  ¡Sobre gratis acreditado!
-                </div>
+                {packPending ? (
+                  <div style={{ fontSize: 11, color: "rgba(255,255,200,.75)", marginTop: 6, display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+                    <span style={{ display: "inline-block", animation: "spin 1s linear infinite" }}>⏳</span>
+                    Tu sobre está llegando, esperá unos segundos…
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,.65)", marginTop: 5 }}>
+                    ¡Sobre gratis acreditado!
+                  </div>
+                )}
               </div>
             ) : (
               <div style={{ animation: "pop .3s both" }}>

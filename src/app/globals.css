@@ -123,6 +123,11 @@ button { font-family: var(--body); cursor: pointer; }
   to   { transform: perspective(1200px) rotateY(0deg); }
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 /* corner-lift pulse used when hovering page turn zones */
 @keyframes cornerPulse {
   0%, 100% { transform: scale(1); }
