@@ -32,9 +32,19 @@ export function PenaltyGame({
   const [totalGoals, setTotalGoals] = useState(0);
 
   useEffect(() => {
-    setUsedToday(localStorage.getItem(`pk_${todayKey()}`) === "1");
-    setTotalGoals(Number(localStorage.getItem("pk_goals") || 0));
-  }, []);
+    // Reset visual state when account switches so previous account's result
+    // doesn't show on screen for the new account.
+    setPhase("aim");
+    setZone(null);
+    setIsGoal(false);
+    if (!pubkey) {
+      setUsedToday(false);
+      setTotalGoals(0);
+      return;
+    }
+    setUsedToday(localStorage.getItem(`pk_${pubkey}_${todayKey()}`) === "1");
+    setTotalGoals(Number(localStorage.getItem(`pk_goals_${pubkey}`) || 0));
+  }, [pubkey]);
 
   function kick(z: number) {
     if (phase !== "aim" || usedToday || !pubkey) return;
@@ -49,13 +59,13 @@ export function PenaltyGame({
 
     setTimeout(() => {
       setPhase("result");
-      localStorage.setItem(`pk_${todayKey()}`, "1");
+      localStorage.setItem(`pk_${pubkey}_${todayKey()}`, "1");
       setUsedToday(true);
 
       const newGoals = goal ? totalGoals + 1 : totalGoals;
       if (goal) {
         setTotalGoals(newGoals);
-        localStorage.setItem("pk_goals", String(newGoals));
+        localStorage.setItem(`pk_goals_${pubkey}`, String(newGoals));
         onGoal();
       }
       onPublish(goal ? "goal" : "save", z, col, newGoals);
@@ -81,7 +91,7 @@ export function PenaltyGame({
           {process.env.NODE_ENV === "development" && (
             <button
               onClick={() => {
-                localStorage.removeItem(`pk_${todayKey()}`);
+                if (pubkey) localStorage.removeItem(`pk_${pubkey}_${todayKey()}`);
                 setUsedToday(false);
                 setPhase("aim");
               }}
