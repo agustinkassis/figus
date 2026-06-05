@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { EventTemplate } from "nostr-tools";
 import { useIdentity } from "@/hooks/useIdentity";
 import { useGameState } from "@/hooks/useGameState";
@@ -52,6 +52,13 @@ function HomeInner() {
   const [busy, setBusy] = useState(false);
   const [invoice, setInvoice] = useState<string | null>(null);
   const [invoiceAmount, setInvoiceAmount] = useState<number>(0);
+  // Listing associated with the current invoice — used to deliver the sticker
+  // immediately when NWC confirms payment (without waiting for ZAP_RECEIPT).
+  const invoiceListing = useRef<Listing | null>(null);
+  // Guards against addSticker being called twice (once by onNwcPaid, once by ZAP_RECEIPT).
+  const buyDelivered = useRef(false);
+  // Listing IDs paid locally — hidden from market immediately, before SETTLEMENT arrives.
+  const [locallyRemovedListings, setLocallyRemovedListings] = useState<string[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [activeMatch, setActiveMatch] = useState<PenaltyMatch | null>(null);
   const [claimedPages, setClaimedPages] = useState<string[]>([]);
@@ -350,6 +357,9 @@ function HomeInner() {
   async function buyListing(listing: Listing) {
     if (!identity) return notify("Conectate primero");
     setBusy(true);
+    // Reset delivery guards for this new purchase attempt
+    invoiceListing.current = listing;
+    buyDelivered.current   = false;
     try {
       const sellerLn = await resolveSellerLnAddress(listing.seller);
       const zapPromise = zap(
@@ -364,10 +374,18 @@ function HomeInner() {
           signerMode: identity.mode,
         },
         () => {
-          addSticker(listing.stickerNum);
+          // ZAP_RECEIPT confirmed — deliver sticker only if not already done via NWC
+          if (!buyDelivered.current) {
+            buyDelivered.current = true;
+            addSticker(listing.stickerNum);
+            notify(`✅ ¡Pago confirmado! La #${listing.stickerNum} fue acreditada a tu álbum`);
+            setTimeout(refresh, 3000);
+          }
+          // Always hide the listing locally (SETTLEMENT from ISSUER may be slow/absent)
+          setLocallyRemovedListings(prev =>
+            prev.includes(listing.id) ? prev : [...prev, listing.id]
+          );
           setInvoice(null);
-          notify(`✅ ¡Pago confirmado! La #${listing.stickerNum} fue acreditada a tu álbum`);
-          setTimeout(refresh, 3000);
         }
       );
       // Race against 25s timeout — prevents hanging when Amber/NIP-46 doesn't respond
@@ -434,6 +452,11 @@ function HomeInner() {
   function claimAlbum()          { return sendRewardClaim("album", "álbum completo"); }
 
   const dupesList = useMemo(() => dupes, [dupes]);
+  // Hide listings the user has already paid for locally, before ISSUER publishes SETTLEMENT.
+  const visibleListings = useMemo(
+    () => listings.filter(l => !locallyRemovedListings.includes(l.id)),
+    [listings, locallyRemovedListings]
+  );
 
   return (
     <div style={{ paddingBottom: 40 }}>
@@ -692,7 +715,7 @@ function HomeInner() {
         )}
         {tab === "market" && (
           <Market
-            listings={listings}
+            listings={visibleListings}
             settlements={settlements}
             myOwnership={ownership}
             myPubkey={pubkey}
@@ -711,7 +734,25 @@ function HomeInner() {
           invoice={invoice}
           amountSats={invoiceAmount}
           onClose={() => setInvoice(null)}
-          onNwcPaid={() => setInvoice(null)}
+          onNwcPaid={() => {
+            // If this invoice belongs to a sticker purchase, deliver optimistically:
+            // the NWC wallet confirmed the payment was sent, so we credit the sticker
+            // right away rather than waiting for the ZAP_RECEIPT (which may never arrive
+            // if the seller's provider publishes the receipt to different relays).
+            const listing = invoiceListing.current;
+            if (listing && !buyDelivered.current) {
+              buyDelivered.current = true;
+              addSticker(listing.stickerNum);
+              notify(`⚡ Pago enviado · la #${listing.stickerNum} fue acreditada a tu álbum`);
+              setTimeout(refresh, 2000);
+            }
+            if (listing) {
+              setLocallyRemovedListings(prev =>
+                prev.includes(listing.id) ? prev : [...prev, listing.id]
+              );
+            }
+            setInvoice(null);
+          }}
           notify={notify}
         />
       )}
