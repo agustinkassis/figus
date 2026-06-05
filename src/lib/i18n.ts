@@ -87,7 +87,7 @@ const T = {
     market_view_traders:  "INTERCAMBIAR",
 
     // Traders / Trade
-    traders_title:              "Intercambios",
+    traders_title:              "Intercambios (PROXIMAMENTE)",
     traders_subtitle:           "Buscá coleccionistas y encontrá tus matches de figuritas",
     traders_search_tab:         "BUSCAR",
     traders_discover_tab:       "DESCUBRIR",

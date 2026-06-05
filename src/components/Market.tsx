@@ -25,7 +25,6 @@ export function Market({
   onCancel: (listing: Listing) => void;
 }) {
   const { t } = useLang();
-  const [view, setView] = useState<"listings" | "traders">("listings");
   const [zoomed, setZoomed] = useState<Listing | null>(null);
   const mine  = listings.filter((l) => l.seller === myPubkey);
   const others = listings.filter((l) => l.seller !== myPubkey);
@@ -46,33 +45,8 @@ export function Market({
         {t.market_subtitle}
       </p>
 
-      {/* Sub-view toggle */}
-      <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
-        {(["listings", "traders"] as const).map((v) => (
-          <button
-            key={v}
-            onClick={() => setView(v)}
-            style={{
-              background: view === v ? "var(--gold)" : "var(--panel)",
-              color: view === v ? "#030b18" : "var(--muted)",
-              border: `1px solid ${view === v ? "var(--gold)" : "var(--line)"}`,
-              padding: "7px 16px",
-              borderRadius: 8,
-              fontFamily: "var(--condensed)",
-              fontWeight: 900,
-              fontSize: 11,
-              letterSpacing: 1,
-              cursor: "pointer",
-            }}
-          >
-            {v === "listings" ? t.market_view_listings : t.market_view_traders}
-          </button>
-        ))}
-      </div>
-
       {/* ── COMPRAR/VENDER ── */}
-      {view === "listings" && (
-        <>
+      <>
           {/* Mis ventas activas */}
           {mine.length > 0 && (
             <div style={{ marginBottom: 18 }}>
@@ -211,12 +185,11 @@ export function Market({
             </div>
           )}
         </>
-      )}
 
-      {/* ── INTERCAMBIAR ── */}
-      {view === "traders" && (
+      {/* ── COLECCIONISTAS ── */}
+      <div style={{ marginTop: 32, borderTop: "1px solid var(--line)", paddingTop: 24 }}>
         <Traders myOwnership={myOwnership} myPubkey={myPubkey} />
-      )}
+      </div>
 
       {/* ── ZOOM OVERLAY ── */}
       {zoomed && typeof document !== "undefined" && createPortal(
