@@ -28,7 +28,6 @@ function isLocalClaimed(pubkey: string): boolean {
   try { return !!localStorage.getItem(claimedKey(pubkey)); } catch { return false; }
 }
 
-// Merge nostr + local taking the max per sticker
 function mergeOwn(nostr: Ownership, local: Ownership): Ownership {
   const result: Ownership = { ...local };
   for (const k of Object.keys(nostr)) {
@@ -38,9 +37,6 @@ function mergeOwn(nostr: Ownership, local: Ownership): Ownership {
   return result;
 }
 
-// Subtract confirmed sales from merged ownership.
-// soldCounts[num] = how many times the current user has sold sticker `num`.
-// This corrects mergeOwn when local cache is stale (higher than Nostr after a sale).
 function subtractSales(merged: Ownership, soldCounts: Record<number, number>): Ownership {
   if (Object.keys(soldCounts).length === 0) return merged;
   const result = { ...merged };
@@ -51,22 +47,51 @@ function subtractSales(merged: Ownership, soldCounts: Record<number, number>): O
   return result;
 }
 
+// Remove listings that have a confirmed settlement.
+// settled is an array of {from, stickerNum} pairs — one entry per settlement.
+// If a seller settled the same sticker twice, two listings are removed.
+function applySettledFilter(
+  openListings: Listing[],
+  settled: { from: string; stickerNum: number }[]
+): Listing[] {
+  if (settled.length === 0) return openListings;
+  const counts = new Map<string, number>();
+  for (const s of settled) {
+    const key = `${s.from}:${s.stickerNum}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const used = new Map<string, number>();
+  return openListings.filter(l => {
+    const key = `${l.seller}:${l.stickerNum}`;
+    const total = counts.get(key) ?? 0;
+    const u = used.get(key) ?? 0;
+    if (u < total) {
+      used.set(key, u + 1);
+      return false; // settled — remove from market
+    }
+    return true;
+  });
+}
+
 export function useGameState(pubkey: string | null) {
   const [ownership, setOwnership] = useState<Ownership>({});
   const [listings, setListings] = useState<Listing[]>([]);
   const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasClaimedFreePack, setHasClaimedFreePack] = useState(false);
-  const ownEvents    = useRef<Event[]>([]);
+  const ownEvents     = useRef<Event[]>([]);
   const listingEvents = useRef<Event[]>([]);
-  // Track how many of each sticker the current user has sold (confirmed by settlement events).
-  // Subtracted from the merged ownership so stale local cache doesn't show sold stickers.
-  const soldCounts = useRef<Record<number, number>>({});
+  // All confirmed settlement pairs — kept in a ref so the listing subscription
+  // can always apply the latest filter without re-subscribing.
+  const settledPairs  = useRef<{ from: string; stickerNum: number }[]>([]);
+  // How many of each sticker the current user has sold — subtracted from merged ownership.
+  const soldCounts    = useRef<Record<number, number>>({});
 
   useEffect(() => {
-    // Reset all refs when account changes
-    ownEvents.current = [];
-    soldCounts.current = {};
+    ownEvents.current    = [];
+    listingEvents.current = [];
+    settledPairs.current = [];
+    soldCounts.current   = {};
 
     if (pubkey) {
       setOwnership(readLocalOwn(pubkey));
@@ -103,42 +128,28 @@ export function useGameState(pubkey: string | null) {
         }
       }
 
-      const ls = await list([{ kinds: [KIND.LISTING] }]);
-      if (!cancelled) {
-        listingEvents.current = ls;
-        setListings(parseListings(ls).filter((l) => l.status === "open"));
-      }
+      // Load listings and settlements in parallel so we can apply the settlement
+      // filter to listings immediately, without a window where sold listings are visible.
+      const [ls, st] = await Promise.all([
+        list([{ kinds: [KIND.LISTING] }]),
+        list([{ kinds: [KIND.SETTLEMENT], authors: [ISSUER_PUBKEY] }]),
+      ]);
 
-      const st = await list([{ kinds: [KIND.SETTLEMENT], authors: [ISSUER_PUBKEY] }]);
       if (!cancelled) {
         const parsedSt = st.map(parseSettlement).filter((s): s is Settlement => s !== null);
+
+        // Populate settled pairs BEFORE setting listings so the filter is ready.
+        settledPairs.current = parsedSt.map(s => ({ from: s.from, stickerNum: s.stickerNum }));
+
+        listingEvents.current = ls;
+        setListings(applySettledFilter(
+          parseListings(ls).filter(l => l.status === "open"),
+          settledPairs.current
+        ));
+
         setSettlements(parsedSt);
 
-        // Remove settled listings from the open market (client-side, since the issuer
-        // can't close the seller's listing — it's signed by the seller's key).
-        // Build a count of how many times each (seller, stickerNum) pair was settled,
-        // then remove that many open listings from our local state.
-        if (parsedSt.length > 0) {
-          const settledCounts: Record<string, number> = {};
-          for (const s of parsedSt) {
-            const key = `${s.from}:${s.stickerNum}`;
-            settledCounts[key] = (settledCounts[key] ?? 0) + 1;
-          }
-          setListings(prev => {
-            const remaining = { ...settledCounts };
-            return prev.filter(l => {
-              const key = `${l.seller}:${l.stickerNum}`;
-              if ((remaining[key] ?? 0) > 0) {
-                remaining[key]--;
-                return false;
-              }
-              return true;
-            });
-          });
-        }
-
         if (pubkey) {
-          // Rebuild sold counts from all historical settlements where we're the seller
           const counts: Record<number, number> = {};
           for (const s of parsedSt) {
             if (s.from === pubkey) {
@@ -146,9 +157,7 @@ export function useGameState(pubkey: string | null) {
             }
           }
           soldCounts.current = counts;
-
           if (Object.keys(counts).length > 0) {
-            // Re-apply ownership with sold counts subtracted
             setOwnership(subtractSales(
               mergeOwn(parseOwnership(ownEvents.current), readLocalOwn(pubkey)),
               counts
@@ -173,39 +182,46 @@ export function useGameState(pubkey: string | null) {
           )
         );
       }
+
       unsubs.push(
         subscribe([{ kinds: [KIND.LISTING] }], (ev) => {
           listingEvents.current = [...listingEvents.current, ev];
-          setListings(parseListings(listingEvents.current).filter((l) => l.status === "open"));
+          // Always apply the settled filter so re-delivered or new listing events
+          // don't resurrect sold listings.
+          setListings(applySettledFilter(
+            parseListings(listingEvents.current).filter(l => l.status === "open"),
+            settledPairs.current
+          ));
         })
       );
+
       unsubs.push(
         subscribe([{ kinds: [KIND.SETTLEMENT], authors: [ISSUER_PUBKEY] }], (ev) => {
           const s = parseSettlement(ev);
-          if (s) {
-            setSettlements((prev) => {
-              // Dedup: ignore if already in state (relay may re-deliver on reconnect)
-              if (prev.some(p => p.id === s.id)) return prev;
-              return [s, ...prev];
+          if (!s) return;
+
+          setSettlements(prev => {
+            if (prev.some(p => p.id === s.id)) return prev;
+            return [s, ...prev];
+          });
+
+          // Add to settled pairs and re-derive listings so the sold listing disappears.
+          settledPairs.current = [...settledPairs.current, { from: s.from, stickerNum: s.stickerNum }];
+          setListings(applySettledFilter(
+            parseListings(listingEvents.current).filter(l => l.status === "open"),
+            settledPairs.current
+          ));
+
+          if (pubkey && s.from === pubkey) {
+            soldCounts.current = {
+              ...soldCounts.current,
+              [s.stickerNum]: (soldCounts.current[s.stickerNum] ?? 0) + 1,
+            };
+            setOwnership(prev => {
+              const next = { ...prev };
+              next[s.stickerNum] = Math.max(0, (next[s.stickerNum] ?? 0) - 1);
+              return next;
             });
-            // Remove the settled listing from the open market regardless of who sold it
-            setListings(prev => {
-              const idx = prev.findIndex(l => l.seller === s.from && l.stickerNum === s.stickerNum);
-              if (idx === -1) return prev;
-              return [...prev.slice(0, idx), ...prev.slice(idx + 1)];
-            });
-            if (pubkey && s.from === pubkey) {
-              // Update soldCounts ref and subtract from ownership state
-              soldCounts.current = {
-                ...soldCounts.current,
-                [s.stickerNum]: (soldCounts.current[s.stickerNum] ?? 0) + 1,
-              };
-              setOwnership(prev => {
-                const next = { ...prev };
-                next[s.stickerNum] = Math.max(0, (next[s.stickerNum] ?? 0) - 1);
-                return next;
-              });
-            }
           }
         })
       );
