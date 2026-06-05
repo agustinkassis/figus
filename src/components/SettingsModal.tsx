@@ -4,6 +4,7 @@ import { useState } from "react";
 import { getNwcString, saveNwcString, clearNwcString, parseNwc } from "@/lib/nwc";
 import { getLocalKeys } from "@/lib/identity";
 import type { Identity } from "@/lib/identity";
+import { useLang } from "@/contexts/LangContext";
 
 function maskNwc(str: string): string {
   const pfx = "nostr+walletconnect://";
@@ -11,7 +12,8 @@ function maskNwc(str: string): string {
   return `${pfx}${body.slice(0, 8)}${"•".repeat(12)}${body.slice(-6)}`;
 }
 
-function CopyButton({ value, label = "📋 COPIAR" }: { value: string; label?: string }) {
+function CopyButton({ value, label }: { value: string; label?: string }) {
+  const { t } = useLang();
   const [copied, setCopied] = useState(false);
   async function copy() {
     await navigator.clipboard.writeText(value);
@@ -31,7 +33,7 @@ function CopyButton({ value, label = "📋 COPIAR" }: { value: string; label?: s
         letterSpacing: 0.3,
       }}
     >
-      {copied ? "✅ COPIADO" : label}
+      {copied ? t.cfg_copied : (label ?? t.cfg_copy)}
     </button>
   );
 }
@@ -45,6 +47,8 @@ export function SettingsModal({
   identity: Identity | null;
   onImportNsec: (raw: string) => void;
 }) {
+  const { t } = useLang();
+
   // ── NWC state ──
   const current = getNwcString();
   const [nwcInput, setNwcInput]   = useState("");
@@ -72,7 +76,7 @@ export function SettingsModal({
       return;
     }
     if (!str.startsWith("nostr+walletconnect://")) {
-      setNwcError("Debe comenzar con nostr+walletconnect://");
+      setNwcError(t.cfg_nwc_invalid);
       return;
     }
     try {
@@ -107,7 +111,7 @@ export function SettingsModal({
       setImportOk(true);
       setTimeout(() => setImportOk(false), 3000);
     } catch (e: any) {
-      setImportError(e.message || "Clave inválida");
+      setImportError(e.message || t.cfg_key_invalid);
     }
   }
 
@@ -148,7 +152,7 @@ export function SettingsModal({
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontSize: 11, fontFamily: "var(--condensed)", fontWeight: 900, letterSpacing: 2, color: "var(--gold)" }}>
-            CONFIGURACIÓN
+            {t.cfg_title}
           </div>
           <button
             onClick={onClose}
@@ -161,12 +165,12 @@ export function SettingsModal({
         {/* ── CLAVES NOSTR (solo modo local) ── */}
         {keys && (
           <div>
-            <SectionLabel>TUS CLAVES NOSTR</SectionLabel>
+            <SectionLabel>{t.cfg_nostr_keys}</SectionLabel>
 
             {/* npub */}
             <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "var(--condensed)", fontWeight: 700, letterSpacing: 0.5, marginBottom: 5 }}>
-                CLAVE PÚBLICA (npub) — podés compartirla
+                {t.cfg_npub_label}
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <div style={{
@@ -184,7 +188,7 @@ export function SettingsModal({
             {/* nsec */}
             <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "var(--condensed)", fontWeight: 700, letterSpacing: 0.5, marginBottom: 5 }}>
-                CLAVE PRIVADA (nsec) — no la compartas con nadie
+                {t.cfg_nsec_label}
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <div style={{
@@ -208,7 +212,7 @@ export function SettingsModal({
                       cursor: "pointer", whiteSpace: "nowrap",
                     }}
                   >
-                    {showNsec ? "🙈 OCULTAR" : "👁 MOSTRAR"}
+                    {showNsec ? t.cfg_nsec_hide : t.cfg_nsec_show}
                   </button>
                   {showNsec && <CopyButton value={keys.nsec} />}
                 </div>
@@ -222,7 +226,7 @@ export function SettingsModal({
               fontSize: 11, color: "var(--muted)", lineHeight: 1.6,
               fontFamily: "var(--condensed)",
             }}>
-              ⚠️ Guardá tu nsec en un lugar seguro (gestores de contraseñas, papel). Quien tenga tu nsec controla tu identidad Nostr.
+              {t.cfg_nsec_warning}
             </div>
 
             {/* Importar otra clave */}
@@ -237,12 +241,12 @@ export function SettingsModal({
                   cursor: "pointer", letterSpacing: 0.3,
                 }}
               >
-                IMPORTAR OTRA CLAVE (nsec)
+                {t.cfg_import_btn}
               </button>
             ) : (
               <div>
                 <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "var(--condensed)", fontWeight: 700, letterSpacing: 0.5, marginBottom: 6 }}>
-                  PEGÁ TU CLAVE PRIVADA (nsec1…)
+                  {t.cfg_import_paste}
                 </div>
                 <textarea
                   autoFocus
@@ -276,7 +280,7 @@ export function SettingsModal({
                       opacity: importInput.trim() ? 1 : 0.5,
                     }}
                   >
-                    IMPORTAR
+                    {t.cfg_import_submit}
                   </button>
                   <button
                     onClick={() => { setImporting(false); setImportInput(""); setImportError(null); }}
@@ -287,14 +291,14 @@ export function SettingsModal({
                       cursor: "pointer",
                     }}
                   >
-                    CANCELAR
+                    {t.cfg_cancel}
                   </button>
                 </div>
               </div>
             )}
             {importOk && (
               <div style={{ fontSize: 11, color: "rgb(100,220,130)", fontFamily: "var(--condensed)", marginTop: 8, textAlign: "center" }}>
-                ✅ Clave importada correctamente
+                {t.cfg_import_ok}
               </div>
             )}
           </div>
@@ -321,7 +325,7 @@ export function SettingsModal({
               </div>
               {nwcSaved && (
                 <div style={{ fontSize: 11, color: "var(--gold)", fontFamily: "var(--condensed)", marginBottom: 10, textAlign: "center" }}>
-                  ✅ Guardado
+                  {t.cfg_nwc_saved}
                 </div>
               )}
               <div style={{ display: "flex", gap: 8 }}>
@@ -334,7 +338,7 @@ export function SettingsModal({
                     cursor: "pointer",
                   }}
                 >
-                  CAMBIAR
+                  {t.cfg_nwc_change}
                 </button>
                 <button
                   onClick={clearNwc}
@@ -345,7 +349,7 @@ export function SettingsModal({
                     cursor: "pointer",
                   }}
                 >
-                  BORRAR
+                  {t.cfg_nwc_clear}
                 </button>
               </div>
             </div>
@@ -355,7 +359,7 @@ export function SettingsModal({
             <div>
               {!hasNwc && (
                 <div style={{ fontSize: 11, color: "var(--muted)", background: "var(--panel2)", borderRadius: 8, padding: "7px 10px", marginBottom: 10, fontFamily: "var(--condensed)" }}>
-                  Sin wallet configurada — los pagos se harán con QR
+                  {t.cfg_nwc_no_wallet}
                 </div>
               )}
               <textarea
@@ -388,7 +392,7 @@ export function SettingsModal({
                     letterSpacing: 0.5, cursor: "pointer",
                   }}
                 >
-                  GUARDAR
+                  {t.cfg_save}
                 </button>
                 {editing && hasNwc && (
                   <button
@@ -400,7 +404,7 @@ export function SettingsModal({
                       cursor: "pointer",
                     }}
                   >
-                    CANCELAR
+                    {t.cfg_cancel}
                   </button>
                 )}
               </div>
@@ -408,7 +412,7 @@ export function SettingsModal({
           )}
 
           <p style={{ fontSize: 10, color: "var(--muted)", marginTop: 12, marginBottom: 0, fontFamily: "var(--condensed)", lineHeight: 1.6 }}>
-            Encontrás tu cadena NWC en Alby Hub, Primal, Mutiny, Wallet of Satoshi u otras wallets compatibles con NIP-47.
+            {t.cfg_nwc_hint}
           </p>
         </div>
       </div>
