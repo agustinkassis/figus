@@ -13,7 +13,8 @@ import type { EventTemplate, Event as NostrEvent } from "nostr-tools";
 import { signEvent } from "@/lib/identity";
 import { list, subscribe, getPool, getRelays } from "@/lib/pool";
 import { KIND, ISSUER_PUBKEY } from "@/lib/constants";
-import { CATALOG, RARITY_META } from "@/lib/catalog";
+import { CATALOG, RARITY_META, TEAMS } from "@/lib/catalog";
+import { StickerFace } from "@/components/StickerCard";
 
 const PenaltyScene3D = dynamic(() => import("@/components/PenaltyScene3D"), {
   ssr: false,
@@ -171,6 +172,50 @@ function Scoreboard({
   );
 }
 
+// ─── Tarjeta de figurita robada/perdida ──────────────────────────────────────
+
+function StolenStickerCard({ num, won }: { num: number; won: boolean }) {
+  const s = CATALOG[num];
+  const r = s ? RARITY_META[s.rarity] : null;
+  const team = s ? TEAMS[s.team] : null;
+  const borderColor = won ? "rgba(82,183,136,.6)" : "rgba(255,100,100,.5)";
+  const glowColor   = won ? "rgba(82,183,136,.25)" : "rgba(255,100,100,.15)";
+  const labelColor  = won ? "#52b788" : "rgba(255,130,130,.9)";
+  const label       = won ? "🃏 ¡FIGURITA ROBADA!" : "😱 TE ROBARON UNA FIGURITA";
+
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
+      animation: "pop .4s cubic-bezier(.34,1.56,.64,1) both",
+    }}>
+      <div style={{
+        fontSize: 10, fontWeight: 900, letterSpacing: 1.5,
+        color: labelColor, fontFamily: "var(--condensed)",
+      }}>
+        {label}
+      </div>
+      <div style={{
+        width: 130, height: 172, borderRadius: 10,
+        border: `2px solid ${borderColor}`,
+        boxShadow: `0 0 24px ${glowColor}, 0 8px 24px rgba(0,0,0,.5)`,
+        overflow: "hidden", flexShrink: 0,
+      }}>
+        <StickerFace num={num} />
+      </div>
+      {s && r && team && (
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontWeight: 900, fontSize: 14, color: "var(--ink)", fontFamily: "var(--condensed)" }}>
+            {s.name}
+          </div>
+          <div style={{ fontSize: 11, color: r.ring, fontWeight: 700, fontFamily: "var(--condensed)" }}>
+            {r.label.toUpperCase()} · {team.name}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export function PenaltyMatchView({
@@ -235,16 +280,45 @@ export function PenaltyMatchView({
   }, [state?.phase, match.id]);
 
   // ── Robo de figurita ─────────────────────────────────────────────────────────
-  const lsKey = `figus_steal_${match.d}`;
+  const lsKey     = `figus_steal_${match.d}`;
+  const lsLostKey = `figus_lost_${match.d}`;
   const [stealPhase, setStealPhase] = useState<"idle" | "claiming" | "done" | "error">(() => {
     try { return localStorage.getItem(lsKey) ? "done" : "idle"; } catch { return "idle"; }
   });
   const [stolenNum, setStolenNum] = useState<number | null>(() => {
     try { const v = localStorage.getItem(lsKey); return v ? Number(v) : null; } catch { return null; }
   });
+  // Sticker que te robaron (perspectiva del perdedor)
+  const [lostNum, setLostNum] = useState<number | null>(() => {
+    try { const v = localStorage.getItem(lsLostKey); return v ? Number(v) : null; } catch { return null; }
+  });
   const stealCleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => () => { stealCleanupRef.current?.(); }, []);
+
+  // Escuchar si alguien nos roba una figurita (perspectiva del perdedor)
+  useEffect(() => {
+    if (!state || state.phase !== "finished" || state.winner === myPubkey || state.winner === null) return;
+    if (lostNum !== null) return; // ya tenemos el resultado
+    const coord = `${KIND.PENALTY_MATCH}:${match.challenger}:${match.d}`;
+    const since = Math.floor(Date.now() / 1000) - 120;
+    const filter = {
+      kinds: [KIND.SETTLEMENT],
+      "#a": [coord],
+      ...(ISSUER_PUBKEY ? { authors: [ISSUER_PUBKEY] } : {}),
+      since,
+    };
+    const unsub = subscribe([filter], (ev: NostrEvent) => {
+      if (ev.tags.find(t => t[0] === "figus-action")?.[1] !== "penalty-steal") return;
+      const stickerTag = ev.tags.find(t => t[0] === "sticker")?.[1];
+      if (!stickerTag) return;
+      const num = Number(stickerTag.split(":")[1]);
+      if (!num) return;
+      setLostNum(num);
+      try { localStorage.setItem(lsLostKey, String(num)); } catch {}
+    });
+    return unsub;
+  }, [state?.phase, state?.winner, myPubkey, match, lostNum, lsLostKey]);
 
   const claimSteal = useCallback(async () => {
     if (!state || state.winner !== myPubkey) return;
@@ -468,7 +542,7 @@ export function PenaltyMatchView({
             </div>
           )}
 
-          {/* Robo de figurita — sólo al ganador */}
+          {/* Robo de figurita — ganador */}
           {state.winner === myPubkey && (
             <div style={{ marginTop: 14, marginBottom: 4 }}>
               {stealPhase === "idle" && (
@@ -492,25 +566,9 @@ export function PenaltyMatchView({
                   ⏳ Enviando al issuer…
                 </div>
               )}
-              {stealPhase === "done" && stolenNum !== null && (() => {
-                const s = CATALOG[stolenNum];
-                const r = s ? RARITY_META[s.rarity] : null;
-                return (
-                  <div style={{
-                    background: "rgba(82,183,136,.1)", border: "1px solid rgba(82,183,136,.35)",
-                    borderRadius: 10, padding: "12px 16px",
-                    animation: "pop .35s cubic-bezier(.34,1.56,.64,1) both",
-                  }}>
-                    <div style={{ fontSize: 10, color: "#52b788", fontWeight: 900, letterSpacing: 1.5, marginBottom: 4 }}>
-                      🃏 FIGURITA ROBADA
-                    </div>
-                    <div style={{ fontSize: 18, fontWeight: 900, color: "var(--ink)" }}>
-                      {s?.name ?? `#${stolenNum}`}
-                    </div>
-                    {r && <div style={{ fontSize: 10, color: r.ring, fontWeight: 700, marginTop: 2 }}>{r.label}</div>}
-                  </div>
-                );
-              })()}
+              {stealPhase === "done" && stolenNum !== null && (
+                <StolenStickerCard num={stolenNum} won />
+              )}
               {stealPhase === "error" && (
                 <div>
                   <div style={{ fontSize: 11, color: "rgba(255,100,100,.7)", marginBottom: 6, fontFamily: "var(--condensed)" }}>
@@ -529,6 +587,13 @@ export function PenaltyMatchView({
                   </button>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Figurita perdida — perdedor */}
+          {state.winner !== null && state.winner !== myPubkey && lostNum !== null && (
+            <div style={{ marginTop: 14, marginBottom: 4 }}>
+              <StolenStickerCard num={lostNum} won={false} />
             </div>
           )}
 
