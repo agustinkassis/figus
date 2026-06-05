@@ -146,7 +146,7 @@ export function StickerZoom({
                   fontSize: 10, color: "var(--muted)", fontFamily: "var(--condensed)",
                   fontWeight: 700, letterSpacing: 0.5, marginBottom: 5, textAlign: "left",
                 }}>
-                  PRECIO (sats)
+                  {t.zoom_price_label}
                 </div>
                 <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
                   <input
@@ -194,7 +194,7 @@ export function StickerZoom({
                       cursor: "pointer",
                     }}
                   >
-                    ⚡ PUBLICAR
+                    {t.zoom_publish}
                   </button>
                   <button
                     onClick={() => setSelling(false)}
@@ -230,7 +230,7 @@ export function StickerZoom({
                   marginBottom: 8,
                 }}
               >
-                {t.zoom_sell} · {suggestedPrice(num)} sats sugerido
+                {t.zoom_sell} · {suggestedPrice(num)} {t.zoom_suggested}
               </button>
             )
           )}

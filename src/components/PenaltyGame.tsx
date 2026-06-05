@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useState, useEffect } from "react";
 import { ARROWS, resolveKick, todayKey } from "@/lib/penalty";
+import { useLang } from "@/contexts/LangContext";
 
 const PenaltyScene3D = dynamic(() => import("@/components/PenaltyScene3D"), {
   ssr: false,
@@ -24,6 +25,7 @@ export function PenaltyGame({
   onPublish: (result: "goal" | "save", zone: number, keeper: number, totalGoals: number) => void;
   packPending?: boolean;
 }) {
+  const { t } = useLang();
   const [phase, setPhase]         = useState<Phase>("aim");
   const [zone, setZone]           = useState<number | null>(null);
   const [keeperCol, setKeeperCol] = useState(1);
@@ -79,15 +81,15 @@ export function PenaltyGame({
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
         <div>
           <div style={{ fontSize: 20, fontWeight: 900, color: "var(--ink)", lineHeight: 1 }}>
-            ⚽ PENAL DIARIO
+            {t.pg_title}
           </div>
           <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3 }}>
-            1 tiro gratis por día · si convertís ganás un sobre
+            {t.pg_subtitle}
           </div>
         </div>
         <div style={{ textAlign: "right", flexShrink: 0 }}>
           <div style={{ fontSize: 28, fontWeight: 900, color: "var(--gold)", lineHeight: 1 }}>{totalGoals}</div>
-          <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 1 }}>GOLES TOTALES</div>
+          <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 1 }}>{t.pg_goals_label}</div>
           {process.env.NODE_ENV === "development" && (
             <button
               onClick={() => {
@@ -125,7 +127,7 @@ export function PenaltyGame({
               fontSize: 9.5, color: "rgba(255,255,255,.45)", textAlign: "center",
               marginBottom: 6, letterSpacing: 1.5, fontWeight: 700,
             }}>
-              ELEGÍ DÓNDE PATEAR
+              {t.pm_choose_zone}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 }}>
               {ARROWS.map((arrow, i) => (
@@ -166,26 +168,26 @@ export function PenaltyGame({
             {isGoal ? (
               <div style={{ animation: "pop .35s cubic-bezier(.34,1.56,.64,1) both" }}>
                 <div style={{ fontSize: 30, fontWeight: 900, color: "#fff", textShadow: "0 0 24px rgba(255,255,200,.7)", lineHeight: 1 }}>
-                  GOOOOOL! ⚽
+                  {t.pg_goal}
                 </div>
                 {packPending ? (
                   <div style={{ fontSize: 11, color: "rgba(255,255,200,.75)", marginTop: 6, display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
                     <span style={{ display: "inline-block", animation: "spin 1s linear infinite" }}>⏳</span>
-                    Tu sobre está llegando, esperá unos segundos…
+                    {t.pg_pack_pending}
                   </div>
                 ) : (
                   <div style={{ fontSize: 11, color: "rgba(255,255,255,.65)", marginTop: 5 }}>
-                    ¡Sobre gratis acreditado!
+                    {t.pg_pack_awarded}
                   </div>
                 )}
               </div>
             ) : (
               <div style={{ animation: "pop .3s both" }}>
                 <div style={{ fontSize: 26, fontWeight: 900, color: "#ff8a80", lineHeight: 1 }}>
-                  🧤 ¡Atajado!
+                  {t.pm_saved}
                 </div>
                 <div style={{ fontSize: 11, color: "rgba(255,255,255,.45)", marginTop: 5 }}>
-                  Volvé mañana para otro tiro
+                  {t.pg_try_tomorrow}
                 </div>
               </div>
             )}
@@ -198,7 +200,7 @@ export function PenaltyGame({
             textAlign: "center", color: "rgba(255,255,255,.4)",
             fontSize: 12, padding: "14px 0", fontWeight: 700,
           }}>
-            Ya pateaste hoy · volvé mañana 🌙
+            {t.pg_already_shot}
           </div>
         )}
 
@@ -208,7 +210,7 @@ export function PenaltyGame({
             textAlign: "center", color: "rgba(255,255,255,.4)",
             fontSize: 12, padding: "14px 0", fontWeight: 700,
           }}>
-            Conectá tu wallet para patear
+            {t.pg_connect_wallet}
           </div>
         )}
       </div>

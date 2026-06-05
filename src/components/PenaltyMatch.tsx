@@ -15,6 +15,7 @@ import { list, subscribe, getPool, getRelays } from "@/lib/pool";
 import { KIND, ISSUER_PUBKEY } from "@/lib/constants";
 import { CATALOG, RARITY_META, TEAMS } from "@/lib/catalog";
 import { StickerFace } from "@/components/StickerCard";
+import { useLang } from "@/contexts/LangContext";
 
 const PenaltyScene3D = dynamic(() => import("@/components/PenaltyScene3D"), {
   ssr: false,
@@ -37,11 +38,12 @@ async function fetchNostrMeta(pubkey: string): Promise<{ name?: string; picture?
 
 function AimGrid({ onKick, disabled }: { onKick: (zone: number) => void; disabled: boolean }) {
   const [hover, setHover] = useState<number | null>(null);
+  const { t } = useLang();
 
   return (
     <div>
       <div style={{ fontSize: 9.5, color: "rgba(255,255,255,.45)", textAlign: "center", marginBottom: 6, letterSpacing: 1.5, fontWeight: 700 }}>
-        ELEGÍ DÓNDE PATEAR
+        {t.pm_choose_zone}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 4 }}>
         {ARROWS.map((arrow, i) => (
@@ -71,12 +73,13 @@ function AimGrid({ onKick, disabled }: { onKick: (zone: number) => void; disable
 
 function KeeperGrid({ onBlock, disabled }: { onBlock: (col: number) => void; disabled: boolean }) {
   const [hover, setHover] = useState<number | null>(null);
-  const labels = ["⬅ IZQUIERDA", "↑ CENTRO", "➡ DERECHA"];
+  const { t } = useLang();
+  const labels = [t.pm_left, t.pm_center, t.pm_right];
 
   return (
     <div>
       <div style={{ fontSize: 9.5, color: "rgba(255,255,255,.45)", textAlign: "center", marginBottom: 6, letterSpacing: 1.5, fontWeight: 700 }}>
-        ¿A QUÉ LADO TE TIRÁS?
+        {t.pm_dive_side}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 4 }}>
         {labels.map((label, col) => (
@@ -114,6 +117,7 @@ function Scoreboard({
   myPubkey: string;
 }) {
   const { match, score, rounds, currentRound } = state;
+  const { t } = useLang();
   const isChallenger = myPubkey === match.challenger;
   const challengerProfile = useProfile(match.challenger);
   const challengedProfile = useProfile(match.challenged);
@@ -136,7 +140,7 @@ function Scoreboard({
             {name}
           </div>
         </div>
-        {isMe && <div style={{ fontSize: 8, color: "rgba(255,255,255,.3)", fontFamily: "var(--condensed)", letterSpacing: 1, marginBottom: 2 }}>VOS</div>}
+        {isMe && <div style={{ fontSize: 8, color: "rgba(255,255,255,.3)", fontFamily: "var(--condensed)", letterSpacing: 1, marginBottom: 2 }}>{t.pm_you}</div>}
         <div style={{ fontSize: 32, fontWeight: 900, color: "var(--gold)", lineHeight: 1 }}>{s}</div>
       </div>
     );
@@ -152,7 +156,7 @@ function Scoreboard({
 
       <div style={{ textAlign: "center", flexShrink: 0 }}>
         <div style={{ fontSize: 10, color: "rgba(255,255,255,.4)", fontFamily: "var(--condensed)", letterSpacing: 1 }}>
-          RONDA {Math.min(currentRound, match.rounds)}/{match.rounds}
+          {t.pm_round} {Math.min(currentRound, match.rounds)}/{match.rounds}
         </div>
         {rounds.map(r => (
           <span key={r.number} style={{
@@ -175,13 +179,14 @@ function Scoreboard({
 // ─── Tarjeta de figurita robada/perdida ──────────────────────────────────────
 
 function StolenStickerCard({ num, won }: { num: number; won: boolean }) {
+  const { t } = useLang();
   const s = CATALOG[num];
   const r = s ? RARITY_META[s.rarity] : null;
   const team = s ? TEAMS[s.team] : null;
   const borderColor = won ? "rgba(82,183,136,.6)" : "rgba(255,100,100,.5)";
   const glowColor   = won ? "rgba(82,183,136,.25)" : "rgba(255,100,100,.15)";
   const labelColor  = won ? "#52b788" : "rgba(255,130,130,.9)";
-  const label       = won ? "🃏 ¡FIGURITA ROBADA!" : "😱 TE ROBARON UNA FIGURITA";
+  const label       = won ? t.pm_steal_won : t.pm_steal_lost;
 
   return (
     <div style={{
@@ -228,6 +233,7 @@ export function PenaltyMatchView({
   onBack: () => void;
 }) {
   const myPubkey = identity.pubkey;
+  const { t } = useLang();
   const { state, publishing, publishCommit, publishBlock, publishReveal } = usePenaltyMatch(match, identity);
 
   // 3D scene state
@@ -410,7 +416,7 @@ export function PenaltyMatchView({
   if (!state) {
     return (
       <div style={{ textAlign: "center", color: "var(--muted)", padding: 32, fontFamily: "var(--condensed)" }}>
-        Cargando partida…
+        {t.pm_loading}
       </div>
     );
   }
@@ -427,10 +433,10 @@ export function PenaltyMatchView({
           onClick={onBack}
           style={{ background: "transparent", border: "1px solid var(--line)", color: "var(--muted)", padding: "5px 10px", borderRadius: 7, fontSize: 11, cursor: "pointer" }}
         >
-          ← VOLVER
+          {t.pm_back}
         </button>
         <div style={{ fontSize: 16, fontWeight: 900, color: "var(--ink)", flex: 1 }}>
-          TANDA PvP · {match.rounds} rondas
+          {t.pm_pvp_title} · {match.rounds} {t.pm_rounds_label}
         </div>
       </div>
 
@@ -455,15 +461,15 @@ export function PenaltyMatchView({
         }}>
           {lastCompleted.result === "cheat" ? (
             <div style={{ fontSize: 14, fontWeight: 900, color: "#cc2244", fontFamily: "var(--condensed)" }}>
-              ⚠️ TRAMPA DETECTADA
+              {t.pm_cheat}
             </div>
           ) : lastCompleted.result === "goal" ? (
             <div style={{ fontSize: 22, fontWeight: 900, color: "#fff", textShadow: "0 0 20px rgba(255,255,200,.8)", fontFamily: "var(--condensed)" }}>
-              ⚽ GOOOL!
+              {t.pm_goal}
             </div>
           ) : (
             <div style={{ fontSize: 22, fontWeight: 900, color: "#ff8a80", fontFamily: "var(--condensed)" }}>
-              🧤 ¡Atajado!
+              {t.pm_saved}
             </div>
           )}
         </div>
@@ -483,7 +489,7 @@ export function PenaltyMatchView({
           )}
           {phase === "waiting_commit" && !iAmKicker && (
             <div style={{ textAlign: "center", color: "rgba(255,255,255,.5)", fontSize: 12, padding: "10px 0", fontFamily: "var(--condensed)", fontWeight: 700 }}>
-              Esperando que el pateador elija zona…
+              {t.pm_waiting_kicker}
             </div>
           )}
 
@@ -492,14 +498,14 @@ export function PenaltyMatchView({
           )}
           {phase === "waiting_block" && !iAmGoalkeeper && (
             <div style={{ textAlign: "center", color: "rgba(255,255,255,.5)", fontSize: 12, padding: "10px 0", fontFamily: "var(--condensed)", fontWeight: 700 }}>
-              El arquero está eligiendo hacia dónde tirarse… 🧤
+              {t.pm_waiting_keeper}
             </div>
           )}
 
           {phase === "waiting_reveal" && iAmKicker && (
             <div style={{ textAlign: "center", padding: "8px 0" }}>
               <div style={{ fontSize: 11, color: "rgba(255,255,255,.5)", marginBottom: 8, fontFamily: "var(--condensed)" }}>
-                El arquero ya eligió. ¡Revelá tu zona!
+                {t.pm_keeper_chose}
               </div>
               <button
                 onClick={handleReveal}
@@ -512,13 +518,13 @@ export function PenaltyMatchView({
                   opacity: publishing ? 0.6 : 1,
                 }}
               >
-                {publishing ? "Publicando…" : "⚡ REVELAR ZONA"}
+                {publishing ? t.pm_publishing : t.pm_reveal_zone}
               </button>
             </div>
           )}
           {phase === "waiting_reveal" && !iAmKicker && (
             <div style={{ textAlign: "center", color: "rgba(255,255,255,.5)", fontSize: 12, padding: "10px 0", fontFamily: "var(--condensed)", fontWeight: 700 }}>
-              Esperando que el pateador revele la zona… ⏳
+              {t.pm_waiting_reveal}
             </div>
           )}
         </div>
@@ -531,14 +537,14 @@ export function PenaltyMatchView({
           animation: "pop .35s cubic-bezier(.34,1.56,.64,1) both",
         }}>
           {state.winner === null ? (
-            <div style={{ fontSize: 24, fontWeight: 900, color: "var(--muted)" }}>🤝 EMPATE</div>
+            <div style={{ fontSize: 24, fontWeight: 900, color: "var(--muted)" }}>{t.pm_draw}</div>
           ) : state.winner === myPubkey ? (
             <div style={{ fontSize: 26, fontWeight: 900, color: "var(--gold)", textShadow: "0 0 24px rgba(232,185,35,.5)" }}>
-              🏆 ¡GANASTE!
+              {t.pm_win}
             </div>
           ) : (
             <div style={{ fontSize: 24, fontWeight: 900, color: "rgba(255,100,100,.8)" }}>
-              😔 Perdiste esta vez
+              {t.pm_lose}
             </div>
           )}
 
@@ -558,12 +564,12 @@ export function PenaltyMatchView({
                     cursor: "pointer", letterSpacing: 0.5,
                   }}
                 >
-                  🃏 ROBAR FIGURITA AL RIVAL
+                  {t.pm_steal_btn}
                 </button>
               )}
               {stealPhase === "claiming" && (
                 <div style={{ color: "var(--muted)", fontSize: 12, fontFamily: "var(--condensed)", padding: "8px 0" }}>
-                  ⏳ Enviando al issuer…
+                  {t.pm_steal_sending}
                 </div>
               )}
               {stealPhase === "done" && stolenNum !== null && (
@@ -572,7 +578,7 @@ export function PenaltyMatchView({
               {stealPhase === "error" && (
                 <div>
                   <div style={{ fontSize: 11, color: "rgba(255,100,100,.7)", marginBottom: 6, fontFamily: "var(--condensed)" }}>
-                    El issuer no respondió
+                    {t.pm_issuer_error}
                   </div>
                   <button
                     onClick={() => setStealPhase("idle")}
@@ -583,7 +589,7 @@ export function PenaltyMatchView({
                       fontWeight: 700, cursor: "pointer",
                     }}
                   >
-                    REINTENTAR
+                    {t.pm_retry}
                   </button>
                 </div>
               )}
@@ -605,7 +611,7 @@ export function PenaltyMatchView({
               fontSize: 12, fontFamily: "var(--condensed)", fontWeight: 700, cursor: "pointer",
             }}
           >
-            VOLVER AL LOBBY
+            {t.pm_back_lobby}
           </button>
         </div>
       )}
@@ -624,6 +630,7 @@ function IncomingMatchCard({
   isFinished: boolean;
   onEnterMatch: (m: PenaltyMatchType) => void;
 }) {
+  const { t } = useLang();
   const profile = useProfile(match.challenger);
   const name = profile?.name || (match.challenger.slice(0, 8) + "…");
   const picture = profile?.picture;
@@ -648,18 +655,18 @@ function IncomingMatchCard({
           {name}
         </div>
         <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
-          {match.rounds} rondas · te desafía
+          {match.rounds} {t.pm_rounds_label} · {t.pm_challenges}
         </div>
       </div>
       {isFinished ? (
         <div style={{ fontSize: 11, fontWeight: 900, fontFamily: "var(--condensed)", color: "#52b788", flexShrink: 0, display: "flex", alignItems: "center", gap: 4 }}>
-          ✓ FINALIZADO
+          {t.pm_finished}
         </div>
       ) : (
         <button
           onClick={() => onEnterMatch(match)}
           style={{ background: "var(--gold)", color: "#030b18", border: "none", padding: "7px 14px", borderRadius: 7, fontWeight: 900, fontSize: 11, cursor: "pointer", flexShrink: 0, fontFamily: "var(--condensed)" }}
-        >JUGAR</button>
+        >{t.pm_play}</button>
       )}
     </div>
   );
@@ -676,6 +683,7 @@ function OutgoingMatchCard({
   onEnterMatch: (m: PenaltyMatchType) => void;
   onCancel: (m: PenaltyMatchType) => void;
 }) {
+  const { t } = useLang();
   const profile = useProfile(match.challenged);
   const name = profile?.name || (match.challenged.slice(0, 8) + "…");
   const picture = profile?.picture;
@@ -699,7 +707,7 @@ function OutgoingMatchCard({
           → {name}
         </div>
         <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
-          {match.rounds} rondas · {isFinished ? "finalizado" : "esperando respuesta"}
+          {match.rounds} {t.pm_rounds_label} · {isFinished ? t.pm_finished_short : t.pm_waiting_response}
         </div>
       </div>
       {isFinished ? (
@@ -709,7 +717,7 @@ function OutgoingMatchCard({
           <button
             onClick={() => onEnterMatch(match)}
             style={{ background: "var(--panel2)", color: "var(--muted)", border: "1px solid var(--line)", padding: "6px 12px", borderRadius: 7, fontWeight: 900, fontSize: 11, cursor: "pointer", flexShrink: 0, fontFamily: "var(--condensed)" }}
-          >VER</button>
+          >{t.pm_view}</button>
           <button
             onClick={() => onCancel(match)}
             style={{ background: "transparent", color: "rgba(255,100,100,.8)", border: "1px solid rgba(255,100,100,.3)", padding: "6px 10px", borderRadius: 7, fontWeight: 900, fontSize: 10, cursor: "pointer", flexShrink: 0, fontFamily: "var(--condensed)" }}
@@ -729,6 +737,7 @@ export function PenaltyMatchLobby({
   identity: Identity | null;
   onEnterMatch: (match: PenaltyMatchType) => void;
 }) {
+  const { t } = useLang();
   const myPubkey = identity?.pubkey ?? null;
   const { incoming, outgoing, loading } = useOpenMatches(myPubkey);
   const [finishedIds] = useState<string[]>(() => {
@@ -763,7 +772,7 @@ export function PenaltyMatchLobby({
           );
         }
       } catch {
-        setError("npub inválido");
+        setError(t.pm_invalid_npub);
       }
       return;
     }
@@ -794,10 +803,10 @@ export function PenaltyMatchLobby({
             setResolvedProfile(prev => prev?.pubkey === pk ? { ...prev, ...meta } : prev)
           );
         } else {
-          setError("NIP-05 no encontrado — revisá que esté bien escrito");
+          setError(t.pm_nip05_not_found);
         }
       } catch {
-        setError("NIP-05 no encontrado — revisá que esté bien escrito");
+        setError(t.pm_nip05_not_found);
       } finally {
         setResolving(false);
       }
@@ -815,7 +824,7 @@ export function PenaltyMatchLobby({
       setResolvedProfile(null);
       setChallenging(false);
     } catch {
-      setError("No se pudo publicar el desafío");
+      setError(t.pm_challenge_error);
     } finally {
       setPublishing(false);
     }
@@ -829,7 +838,7 @@ export function PenaltyMatchLobby({
   if (!identity) {
     return (
       <div style={{ textAlign: "center", color: "var(--muted)", fontSize: 12, padding: "14px 0", fontFamily: "var(--condensed)", fontWeight: 700 }}>
-        Conectá tu identidad Nostr para jugar PvP
+        {t.pm_not_connected}
       </div>
     );
   }
@@ -838,8 +847,8 @@ export function PenaltyMatchLobby({
     <div style={{ fontFamily: "var(--condensed)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div>
-          <div style={{ fontSize: 18, fontWeight: 900, color: "var(--ink)", lineHeight: 1 }}>⚽ PENAL PvP</div>
-          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3 }}>Tanda por turnos sobre Nostr · commit-reveal</div>
+          <div style={{ fontSize: 18, fontWeight: 900, color: "var(--ink)", lineHeight: 1 }}>⚽ {t.pm_pvp_title}</div>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3 }}>{t.pm_pvp_description}</div>
         </div>
         <button
           onClick={() => setChallenging(true)}
@@ -850,7 +859,7 @@ export function PenaltyMatchLobby({
             letterSpacing: 0.5, cursor: "pointer",
           }}
         >
-          + DESAFIAR
+          {t.pm_challenge_btn}
         </button>
       </div>
 
@@ -861,7 +870,7 @@ export function PenaltyMatchLobby({
           borderRadius: 12, padding: "14px 16px", marginBottom: 14,
         }}>
           <div style={{ fontSize: 10, color: "var(--muted)", letterSpacing: 0.5, marginBottom: 6 }}>
-            NPUB, HEX O NIP-05 DEL RIVAL
+            {t.pm_opponent_label}
           </div>
           <textarea
             autoFocus
@@ -879,7 +888,7 @@ export function PenaltyMatchLobby({
           />
 
           {resolving && (
-            <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 8 }}>Buscando…</div>
+            <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 8 }}>{t.pm_resolving}</div>
           )}
           {error && !resolving && (
             <div style={{ fontSize: 11, color: "#cc2244", marginBottom: 8 }}>{error}</div>
@@ -920,7 +929,7 @@ export function PenaltyMatchLobby({
           )}
 
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-            <div style={{ fontSize: 10, color: "var(--muted)" }}>RONDAS</div>
+            <div style={{ fontSize: 10, color: "var(--muted)" }}>{t.pm_rounds_selector}</div>
             {[1, 3, 5].map(n => (
               <button
                 key={n}
@@ -946,7 +955,7 @@ export function PenaltyMatchLobby({
                 opacity: resolvedProfile && !publishing && !resolving ? 1 : 0.5,
               }}
             >
-              {publishing ? "Publicando…" : "DESAFIAR"}
+              {publishing ? t.pm_publishing : t.pm_challenge_submit}
             </button>
             <button
               onClick={() => { setChallenging(false); setInputPk(""); setError(null); }}
@@ -955,20 +964,20 @@ export function PenaltyMatchLobby({
                 color: "var(--muted)", padding: "9px 14px", borderRadius: 8,
                 fontSize: 12, cursor: "pointer",
               }}
-            >CANCELAR</button>
+            >{t.pm_challenge_cancel}</button>
           </div>
         </div>
       )}
 
       {loading && (
-        <div style={{ textAlign: "center", color: "var(--muted)", fontSize: 12, padding: 16 }}>Leyendo relays…</div>
+        <div style={{ textAlign: "center", color: "var(--muted)", fontSize: 12, padding: 16 }}>{t.pm_loading_matches}</div>
       )}
 
       {/* Desafíos recibidos */}
       {incoming.length > 0 && (
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 10, color: "var(--gold)", letterSpacing: 1.5, fontWeight: 900, marginBottom: 8 }}>
-            DESAFÍOS RECIBIDOS
+            {t.pm_challenges_incoming}
           </div>
           <div style={{ display: "grid", gap: 6 }}>
             {incoming.map(m => (
@@ -987,7 +996,7 @@ export function PenaltyMatchLobby({
       {outgoing.length > 0 && (
         <div>
           <div style={{ fontSize: 10, color: "var(--muted)", letterSpacing: 1.5, fontWeight: 900, marginBottom: 8 }}>
-            DESAFÍOS ENVIADOS
+            {t.pm_challenges_outgoing}
           </div>
           <div style={{ display: "grid", gap: 6 }}>
             {outgoing.map(m => (
@@ -1005,7 +1014,7 @@ export function PenaltyMatchLobby({
 
       {!loading && incoming.length === 0 && outgoing.length === 0 && (
         <div style={{ textAlign: "center", color: "var(--muted)", fontSize: 12, padding: "12px 0", fontFamily: "var(--condensed)" }}>
-          No hay partidas activas · desafiá a alguien con su npub
+          {t.pm_no_matches}
         </div>
       )}
     </div>

@@ -133,7 +133,7 @@ export function Album({
             <input
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="🔍 Equipo…"
+              placeholder={t.album_search_placeholder}
               style={{
                 background: searchQuery ? "var(--panel)" : "transparent",
                 border: `1px solid ${searchQuery ? "var(--gold)" : "var(--line)"}`,
@@ -189,7 +189,7 @@ export function Album({
                       {tm.name}
                     </div>
                     <div style={{ fontSize: 9, color: "var(--muted)", fontFamily: "var(--condensed)" }}>
-                      GRUPO {grp} · {ownedCount}/{page.numbers.length}
+                      {t.album_group_label} {grp} · {ownedCount}/{page.numbers.length}
                     </div>
                   </div>
                   <div style={{ fontSize: 10, color: "var(--muted)" }}>→</div>
@@ -200,7 +200,7 @@ export function Album({
         )}
         {searchQuery.trim() && searchResults.length === 0 && (
           <div style={{ marginTop: 6, fontSize: 11, color: "var(--muted)", fontFamily: "var(--condensed)", padding: "6px 2px" }}>
-            Sin resultados para "{searchQuery}"
+            {t.album_no_results} &ldquo;{searchQuery}&rdquo;
           </div>
         )}
       </div>
@@ -220,7 +220,7 @@ export function Album({
             )}
           </div>
           <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "var(--condensed)", marginTop: 1 }}>
-            {!isFwc && `GRUPO ${group} · `}
+            {!isFwc && `${t.album_group_label} ${group} · `}
             {t.album_page} {idx + 1}/{PAGES.length}
             {!isFwc && ` · ${owned}/${total} ${t.album_stuck}`}
           </div>
@@ -277,7 +277,7 @@ export function Album({
                     {team.name.toUpperCase()}
                   </div>
                   <div style={{ fontSize: 11, color: "rgba(255,255,255,.65)", fontFamily: "var(--condensed)", fontWeight: 700, marginTop: 2 }}>
-                    GRUPO {group}
+                    {t.album_group_label} {group}
                   </div>
                 </div>
 
@@ -319,7 +319,7 @@ export function Album({
                         cursor: claimed ? "default" : "pointer",
                       }}
                     >
-                      {claimed ? "✅ RECLAMADO" : "🏆 PREMIO"}
+                      {claimed ? t.album_claimed : t.album_prize}
                     </button>
                   );
                 })()}
@@ -363,7 +363,6 @@ export function Album({
                             {dupe && (
                               <button
                                 onClick={() => onSell(n, suggestedPrice(n))}
-                                title="Vender repetida"
                                 style={{
                                   position: "absolute", bottom: 0, left: 0, right: 0,
                                   background: "rgba(232,185,35,.95)",
@@ -373,7 +372,7 @@ export function Album({
                                   letterSpacing: 0.3,
                                 }}
                               >
-                                ×{count} · VENDER
+                                ×{count} · {t.album_sell_dupe}
                               </button>
                             )}
                           </>
@@ -385,7 +384,7 @@ export function Album({
                             gap: 2, opacity: 0.38,
                           }}>
                             <span style={{ fontFamily: "var(--condensed)", fontWeight: 900, fontSize: 14, color: "#555" }}>{n}</span>
-                            <span style={{ fontSize: 6.5, color: "#888", fontFamily: "var(--condensed)", letterSpacing: 0.5 }}>PEGAR</span>
+                            <span style={{ fontSize: 6.5, color: "#888", fontFamily: "var(--condensed)", letterSpacing: 0.5 }}>{t.album_paste}</span>
                           </div>
                         )}
                       </div>
@@ -513,6 +512,7 @@ function AlbumCover({
   ownership: Ownership; total: number; owned: number; onZoom: (n: number) => void;
   albumComplete: boolean; albumClaimed: boolean; onClaimAlbum: () => void;
 }) {
+  const { t } = useLang();
   const pct = Math.round((owned / total) * 100);
   return (
     <div style={{ position: "relative", overflow: "hidden" }}>
@@ -580,7 +580,7 @@ function AlbumCover({
           </div>
           <div style={{ width: 1, height: 20, background: "rgba(255,255,255,.2)" }} />
           <div style={{ fontSize: 9, color: "rgba(255,255,255,.5)", fontFamily: "var(--condensed)", letterSpacing: 2, fontWeight: 700 }}>
-            ÁLBUM OFICIAL
+            {t.cover_official}
           </div>
         </div>
 
@@ -647,10 +647,10 @@ function AlbumCover({
             fontSize: 11,
             letterSpacing: 2,
           }}>
-            ÁLBUM DE FIGURAS
+            {t.cover_album}
           </div>
           <div style={{ marginTop: 6, fontSize: 8.5, color: "rgba(255,255,255,.35)", fontFamily: "var(--condensed)", letterSpacing: 1.5 }}>
-            NOSTR + LIGHTNING ⚡ EDICIÓN DIGITAL
+            {t.cover_digital}
           </div>
         </div>
 
@@ -672,7 +672,7 @@ function AlbumCover({
             <div style={{ height: "100%", width: `${pct}%`, background: "linear-gradient(90deg,var(--gold),#d4920a)", borderRadius: 99, transition: "width .5s" }} />
           </div>
           <div style={{ fontSize: 9, color: "rgba(255,255,255,.4)", fontFamily: "var(--condensed)", letterSpacing: 1, marginTop: 5 }}>
-            FIGURAS PEGADAS · {pct}% COMPLETO
+            {t.album_complete} · {pct}% {t.album_pct_complete}
           </div>
           {albumComplete && (
             <button
@@ -690,7 +690,7 @@ function AlbumCover({
                 letterSpacing: 0.5, cursor: albumClaimed ? "default" : "pointer",
               }}
             >
-              {albumClaimed ? "✅ ÁLBUM COMPLETO — RECLAMADO" : "🏆 RECLAMAR PREMIO · ÁLBUM COMPLETO"}
+              {albumClaimed ? t.album_complete_claimed : t.album_complete_btn}
             </button>
           )}
         </div>
@@ -710,7 +710,7 @@ function AlbumCover({
           color: "#888", textAlign: "center",
           marginBottom: 8,
         }}>
-          ★ FIGURAS ESPECIALES FWC ★
+          {t.album_fwc_special}
         </div>
         <FwcGrid ownership={ownership} onZoom={onZoom} />
       </div>
@@ -720,6 +720,7 @@ function AlbumCover({
 
 // Muestra las 20 figuras FWC en un grid compacto dentro de la portada
 function FwcGrid({ ownership, onZoom }: { ownership: Ownership; onZoom: (n: number) => void }) {
+  const { t } = useLang();
   const fwcNums = PAGES[0].numbers;
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 5 }}>
@@ -753,7 +754,7 @@ function FwcGrid({ ownership, onZoom }: { ownership: Ownership; onZoom: (n: numb
                 gap: 1, opacity: 0.35,
               }}>
                 <span style={{ fontFamily: "var(--condensed)", fontWeight: 900, fontSize: 11, color: "#555" }}>{n}</span>
-                <span style={{ fontSize: 5.5, color: "#888", fontFamily: "var(--condensed)", letterSpacing: 0.5 }}>PEGAR</span>
+                <span style={{ fontSize: 5.5, color: "#888", fontFamily: "var(--condensed)", letterSpacing: 0.5 }}>{t.album_paste}</span>
               </div>
             )}
           </div>
