@@ -525,20 +525,20 @@ function HomeInner() {
             style={{
               background: "transparent",
               border: "1px solid var(--line)",
-              color: "var(--muted)",
               width: 34,
               height: 34,
               borderRadius: 8,
               cursor: "pointer",
               display: "grid",
               placeItems: "center",
-              fontSize: 16,
-              transition: "border-color .2s, color .2s",
+              padding: 0,
+              transition: "border-color .2s, opacity .2s",
+              opacity: 0.75,
             }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--gold)"; (e.currentTarget as HTMLButtonElement).style.color = "var(--gold)"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--line)"; (e.currentTarget as HTMLButtonElement).style.color = "var(--muted)"; }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--gold)"; (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--line)"; (e.currentTarget as HTMLButtonElement).style.opacity = "0.75"; }}
           >
-            ⚙
+            <img src="/nwc-logo.svg" alt="NWC Settings" width={20} height={20} style={{ display: "block" }} />
           </button>
           <Connect
             identity={identity}
