@@ -793,8 +793,15 @@ export function PenaltyMatchLobby({
       return;
     }
 
-    // NIP-05 full address (user@domain) — debounce 700ms
-    if (input.includes("@")) {
+    // Determine search term and whether we have a complete NIP-05 address
+    const atIdx = input.indexOf("@");
+    const afterAt = atIdx > 0 ? input.slice(atIdx + 1) : "";
+    const isCompleteNip05 = atIdx > 0 && afterAt.includes(".");
+    // Use the part before "@" as the search term (or full input if no "@")
+    const searchTerm = atIdx > 0 ? input.slice(0, atIdx) : input;
+
+    // NIP-05 full address (user@domain.tld) — debounce 700ms
+    if (isCompleteNip05) {
       setResolving(true);
       const timer = setTimeout(async () => {
         try {
@@ -819,15 +826,15 @@ export function PenaltyMatchLobby({
       return () => { clearTimeout(timer); setResolving(false); };
     }
 
-    // Free-text NIP-50 search (relay.nostr.band) — debounce 400ms
-    if (input.length < 2) return;
+    // Free-text NIP-50 search via relay.nostr.band — debounce 400ms
+    if (searchTerm.length < 2) return;
     setLoadingSuggestions(true);
     const timer = setTimeout(async () => {
       try {
         const pool = getPool();
         const evs = await pool.querySync(
           ["wss://relay.nostr.band"],
-          { kinds: [0], search: input, limit: 8 },
+          { kinds: [0], search: searchTerm, limit: 8 },
           { maxWait: 3000 }
         );
         const seen = new Set<string>();
@@ -854,8 +861,8 @@ export function PenaltyMatchLobby({
   }, [inputPk]);
 
   function selectSuggestion(s: { pubkey: string; npub: string; name?: string; picture?: string; nip05?: string }) {
-    setResolvedProfile(s);
-    setInputPk(s.nip05 || s.npub);
+    // Use npub so the useEffect decodes it synchronously without a new async lookup
+    setInputPk(s.npub);
     setSuggestions([]);
     setError(null);
   }

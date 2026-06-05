@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { nip19, nip05 } from "nostr-tools";
+import { getPool } from "@/lib/pool";
 import { computeMatch, useTraderInfo, useAllTraders } from "@/hooks/useTraders";
 import { CATALOG, RARITY_META } from "@/lib/catalog";
 import { useLang } from "@/contexts/LangContext";
@@ -23,6 +24,63 @@ export function Traders({
   const [selectedPubkey, setSelectedPubkey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [resolving, setResolving] = useState(false);
+  const [suggestions, setSuggestions] = useState<Array<{
+    pubkey: string; npub: string; name?: string; picture?: string; nip05?: string;
+  }>>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+
+  // NIP-50 live search as user types
+  useEffect(() => {
+    setSuggestions([]);
+    const input = searchInput.trim();
+    if (!input || input.startsWith("npub1") || /^[0-9a-f]{64}$/i.test(input)) return;
+
+    const atIdx = input.indexOf("@");
+    const afterAt = atIdx > 0 ? input.slice(atIdx + 1) : "";
+    const isCompleteNip05 = atIdx > 0 && afterAt.includes(".");
+    if (isCompleteNip05) return; // let handleSearch handle it on submit
+
+    const searchTerm = atIdx > 0 ? input.slice(0, atIdx) : input;
+    if (searchTerm.length < 2) return;
+
+    setLoadingSuggestions(true);
+    const timer = setTimeout(async () => {
+      try {
+        const pool = getPool();
+        const evs = await pool.querySync(
+          ["wss://relay.nostr.band"],
+          { kinds: [0], search: searchTerm, limit: 8 },
+          { maxWait: 3000 }
+        );
+        const seen = new Set<string>();
+        const results = evs.flatMap(ev => {
+          if (seen.has(ev.pubkey)) return [];
+          seen.add(ev.pubkey);
+          try {
+            const m = JSON.parse(ev.content);
+            return [{
+              pubkey: ev.pubkey,
+              npub: nip19.npubEncode(ev.pubkey),
+              name: m.name || m.display_name || m.username,
+              picture: m.picture,
+              nip05: m.nip05,
+            }];
+          } catch { return []; }
+        });
+        setSuggestions(results);
+      } catch { /* silent */ } finally {
+        setLoadingSuggestions(false);
+      }
+    }, 400);
+    return () => { clearTimeout(timer); setLoadingSuggestions(false); };
+  }, [searchInput]);
+
+  function selectSuggestion(s: { pubkey: string; npub: string; name?: string; picture?: string; nip05?: string }) {
+    setSearchInput(s.npub);
+    setSearchPubkey(s.pubkey);
+    setSuggestions([]);
+    setSearchError(null);
+  }
 
   // Single trader lookup (search tab)
   const { info: searchedTrader, loading: searchLoading } = useTraderInfo(
@@ -161,42 +219,91 @@ export function Traders({
       {/* ── BUSCAR ── */}
       {subTab === "search" && (
         <div>
-          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-            <input
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              placeholder={t.traders_search_placeholder}
-              style={{
-                flex: 1,
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                value={searchInput}
+                onChange={(e) => { setSearchInput(e.target.value); setSearchError(null); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { setSuggestions([]); handleSearch(); }
+                  if (e.key === "Escape") setSuggestions([]);
+                }}
+                placeholder={t.traders_search_placeholder}
+                style={{
+                  flex: 1,
+                  background: "var(--panel)",
+                  border: "1px solid var(--line)",
+                  borderRadius: suggestions.length > 0 || loadingSuggestions ? "8px 8px 0 0" : "8px",
+                  padding: "10px 12px",
+                  color: "var(--ink)",
+                  fontSize: 12,
+                  fontFamily: "var(--condensed)",
+                  outline: "none",
+                }}
+              />
+              <button
+                onClick={() => { setSuggestions([]); handleSearch(); }}
+                disabled={resolving}
+                style={{
+                  background: resolving ? "var(--panel2)" : "var(--gold)",
+                  color: resolving ? "var(--muted)" : "#030b18",
+                  border: "none",
+                  padding: "10px 16px",
+                  borderRadius: 8,
+                  fontSize: 11,
+                  fontWeight: 900,
+                  fontFamily: "var(--condensed)",
+                  cursor: resolving ? "default" : "pointer",
+                  flexShrink: 0,
+                }}
+              >
+                {resolving ? "…" : t.traders_search_btn}
+              </button>
+            </div>
+            {/* NIP-50 autocomplete dropdown */}
+            {(loadingSuggestions || suggestions.length > 0) && (
+              <div style={{
                 background: "var(--panel)",
                 border: "1px solid var(--line)",
-                borderRadius: 8,
-                padding: "10px 12px",
-                color: "var(--ink)",
-                fontSize: 12,
-                fontFamily: "var(--condensed)",
-                outline: "none",
-              }}
-            />
-            <button
-              onClick={handleSearch}
-              disabled={resolving}
-              style={{
-                background: resolving ? "var(--panel2)" : "var(--gold)",
-                color: resolving ? "var(--muted)" : "#030b18",
-                border: "none",
-                padding: "10px 16px",
-                borderRadius: 8,
-                fontSize: 11,
-                fontWeight: 900,
-                fontFamily: "var(--condensed)",
-                cursor: resolving ? "default" : "pointer",
-                flexShrink: 0,
-              }}
-            >
-              {resolving ? "…" : t.traders_search_btn}
-            </button>
+                borderTop: "none",
+                borderRadius: "0 0 8px 8px",
+                overflow: "hidden",
+              }}>
+                {loadingSuggestions && suggestions.length === 0 && (
+                  <div style={{ padding: "8px 12px", fontSize: 10, color: "var(--muted)", fontFamily: "var(--condensed)" }}>…</div>
+                )}
+                {suggestions.map(s => (
+                  <div
+                    key={s.pubkey}
+                    onClick={() => selectSuggestion(s)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 8,
+                      padding: "8px 12px", cursor: "pointer",
+                      borderTop: "1px solid var(--line)",
+                    }}
+                    onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = "rgba(232,185,35,.07)"}
+                    onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = "transparent"}
+                  >
+                    {s.picture ? (
+                      <img src={s.picture} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+                        onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                    ) : (
+                      <div style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--panel2)", display: "grid", placeItems: "center", fontSize: 14, flexShrink: 0 }}>👤</div>
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ink)", fontFamily: "var(--condensed)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {s.name || s.npub.slice(0, 16) + "…"}
+                      </div>
+                      {s.nip05 && (
+                        <div style={{ fontSize: 10, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {s.nip05}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           {searchError && (
             <div style={{ color: "#f87171", fontSize: 11, marginBottom: 8 }}>
