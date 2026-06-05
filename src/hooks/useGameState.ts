@@ -114,6 +114,29 @@ export function useGameState(pubkey: string | null) {
         const parsedSt = st.map(parseSettlement).filter((s): s is Settlement => s !== null);
         setSettlements(parsedSt);
 
+        // Remove settled listings from the open market (client-side, since the issuer
+        // can't close the seller's listing — it's signed by the seller's key).
+        // Build a count of how many times each (seller, stickerNum) pair was settled,
+        // then remove that many open listings from our local state.
+        if (parsedSt.length > 0) {
+          const settledCounts: Record<string, number> = {};
+          for (const s of parsedSt) {
+            const key = `${s.from}:${s.stickerNum}`;
+            settledCounts[key] = (settledCounts[key] ?? 0) + 1;
+          }
+          setListings(prev => {
+            const remaining = { ...settledCounts };
+            return prev.filter(l => {
+              const key = `${l.seller}:${l.stickerNum}`;
+              if ((remaining[key] ?? 0) > 0) {
+                remaining[key]--;
+                return false;
+              }
+              return true;
+            });
+          });
+        }
+
         if (pubkey) {
           // Rebuild sold counts from all historical settlements where we're the seller
           const counts: Record<number, number> = {};
@@ -160,7 +183,17 @@ export function useGameState(pubkey: string | null) {
         subscribe([{ kinds: [KIND.SETTLEMENT], authors: [ISSUER_PUBKEY] }], (ev) => {
           const s = parseSettlement(ev);
           if (s) {
-            setSettlements((prev) => [s, ...prev]);
+            setSettlements((prev) => {
+              // Dedup: ignore if already in state (relay may re-deliver on reconnect)
+              if (prev.some(p => p.id === s.id)) return prev;
+              return [s, ...prev];
+            });
+            // Remove the settled listing from the open market regardless of who sold it
+            setListings(prev => {
+              const idx = prev.findIndex(l => l.seller === s.from && l.stickerNum === s.stickerNum);
+              if (idx === -1) return prev;
+              return [...prev.slice(0, idx), ...prev.slice(idx + 1)];
+            });
             if (pubkey && s.from === pubkey) {
               // Update soldCounts ref and subtract from ownership state
               soldCounts.current = {
