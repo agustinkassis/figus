@@ -214,18 +214,17 @@ async function handleStealClaim(ev: Event) {
   const coord = tag(ev, "a");
   if (!coord) return console.log("⚠️ steal claim sin coord de partida");
 
-  const seenKey = `${coord}:${ev.pubkey}`;
-  if (stealSeen.has(seenKey)) return;
-  stealSeen.add(seenKey);
+  if (stealSeen.has(ev.id)) return;
+  stealSeen.add(ev.id);
 
-  console.log(`🃏 steal claim de ${ev.pubkey.slice(0, 8)}… para ${coord}`);
+  console.log(`🃏 steal claim de ${ev.pubkey.slice(0, 8)}… para ${coord} (ev ${ev.id.slice(0, 10)}…)`);
 
   // Verificar que no procesamos esto antes (sobrevive reinicios del issuer)
   const existingSettlements = await listOnce([{
     kinds: [KIND.SETTLEMENT], authors: [ISSUER], "#p": [ev.pubkey], "#a": [coord],
   }]);
   if (existingSettlements.some(e => tag(e, "figus-action") === "penalty-steal")) {
-    return console.log("ℹ️ steal ya procesado anteriormente:", seenKey);
+    return console.log(`ℹ️ steal ya procesado anteriormente: ${coord}:${ev.pubkey.slice(0, 8)}…`);
   }
 
   // Parsear coord: "30301:challengerPubkey:d"
