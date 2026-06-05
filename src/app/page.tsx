@@ -552,178 +552,192 @@ function HomeInner() {
         </div>
       </header>
 
-      {!configured && (
-        <div
-          style={{
-            maxWidth: 720,
-            margin: "20px auto 0",
-            padding: 16,
-            background: "var(--panel)",
-            border: "1px solid var(--gold)",
-            borderRadius: 12,
-            fontSize: 14,
-          }}
-        >
-          <strong style={{ color: "var(--gold)" }}>Falta configurar el issuer.</strong>{" "}
-          Corré <code>npm run seed</code> para generar las claves y publicar el
-          catálogo, copiá la pubkey impresa en <code>.env</code> como{" "}
-          <code>NEXT_PUBLIC_ISSUER_PUBKEY</code>, y reiniciá el dev server.
-        </div>
-      )}
+      {identity ? (
+        <>
+          {!configured && (
+            <div
+              style={{
+                maxWidth: 720,
+                margin: "20px auto 0",
+                padding: 16,
+                background: "var(--panel)",
+                border: "1px solid var(--gold)",
+                borderRadius: 12,
+                fontSize: 14,
+              }}
+            >
+              <strong style={{ color: "var(--gold)" }}>Falta configurar el issuer.</strong>{" "}
+              Corré <code>npm run seed</code> para generar las claves y publicar el
+              catálogo, copiá la pubkey impresa en <code>.env</code> como{" "}
+              <code>NEXT_PUBLIC_ISSUER_PUBKEY</code>, y reiniciá el dev server.
+            </div>
+          )}
 
-      {/* TABS */}
-      <nav
-        style={{
-          display: "flex",
-          gap: 4,
-          padding: "12px 20px 0",
-          justifyContent: "center",
-          borderBottom: "1px solid var(--line)",
-        }}
-      >
-        {(
-          [
-            ["album",   t.tab_album],
-            ["packs",   t.tab_packs],
-            ["market",  t.tab_market],
-            ["fixture", t.tab_fixture],
-            ["game",    t.tab_game],
-          ] as [Tab, string][]
-        ).map(([k, l]) => (
-          <button
-            key={k}
-            onClick={() => setTab(k)}
+          {/* TABS */}
+          <nav
             style={{
-              background: "transparent",
-              border: "none",
-              borderBottom: tab === k ? "2px solid var(--gold)" : "2px solid transparent",
-              color: tab === k ? "var(--gold)" : "var(--muted)",
-              padding: "8px 18px 10px",
-              fontSize: 12,
-              fontWeight: 900,
-              fontFamily: "var(--condensed)",
-              letterSpacing: 1,
-              transition: "color .2s",
+              display: "flex",
+              gap: 4,
+              padding: "12px 20px 0",
+              justifyContent: "center",
+              borderBottom: "1px solid var(--line)",
             }}
           >
-            {l}
-          </button>
-        ))}
-      </nav>
+            {(
+              [
+                ["album",   t.tab_album],
+                ["packs",   t.tab_packs],
+                ["market",  t.tab_market],
+                ["fixture", t.tab_fixture],
+                ["game",    t.tab_game],
+              ] as [Tab, string][]
+            ).map(([k, l]) => (
+              <button
+                key={k}
+                onClick={() => setTab(k)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  borderBottom: tab === k ? "2px solid var(--gold)" : "2px solid transparent",
+                  color: tab === k ? "var(--gold)" : "var(--muted)",
+                  padding: "8px 18px 10px",
+                  fontSize: 12,
+                  fontWeight: 900,
+                  fontFamily: "var(--condensed)",
+                  letterSpacing: 1,
+                  transition: "color .2s",
+                }}
+              >
+                {l}
+              </button>
+            ))}
+          </nav>
 
-      {/* progress */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "10px 20px 0",
-          maxWidth: 720,
-          margin: "0 auto",
-        }}
-      >
-        <div
-          style={{
-            flex: 1,
-            height: 6,
-            background: "var(--panel2)",
-            borderRadius: 99,
-            overflow: "hidden",
-            border: "1px solid var(--line)",
-          }}
-        >
+          {/* progress */}
           <div
             style={{
-              height: "100%",
-              width: `${(owned / ALL_NUMBERS.length) * 100}%`,
-              background: "linear-gradient(90deg, var(--gold), #d4920a)",
-              transition: "width .5s ease",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "10px 20px 0",
+              maxWidth: 720,
+              margin: "0 auto",
             }}
-          />
-        </div>
-        <span
-          style={{
-            fontSize: 11,
-            color: "var(--gold)",
-            whiteSpace: "nowrap",
-            fontFamily: "var(--condensed)",
-            fontWeight: 900,
-          }}
-        >
-          {owned}/{ALL_NUMBERS.length}
-        </span>
-        <span style={{ fontSize: 10, color: "var(--muted)", fontFamily: "var(--condensed)" }}>
-          {t.collected}
-        </span>
-      </div>
-
-      <main style={{ maxWidth: 720, margin: "0 auto", padding: "18px 20px" }}>
-        {loading && configured && (
-          <p style={{ opacity: 0.5, textAlign: "center" }}>{t.loading}</p>
-        )}
-        {tab === "album" && (
-          <Album
-            ownership={ownership}
-            onClaim={claimPage}
-            onClaimAlbum={claimAlbum}
-            onSell={listForSale}
-            claimedPages={claimedPages}
-          />
-        )}
-        {tab === "packs" && (
-          <>
-            <Packs
-              onOpen={openPack}
-              onDemo={openPackDemo}
-              onCancel={() => setBusy(false)}
-              busy={busy}
-              freePack={{
-                available: !!pubkey && !hasClaimedFreePack,
-                onOpen: openFreePack,
+          >
+            <div
+              style={{
+                flex: 1,
+                height: 6,
+                background: "var(--panel2)",
+                borderRadius: 99,
+                overflow: "hidden",
+                border: "1px solid var(--line)",
               }}
-            />
-            <MyStickers ownership={ownership} onSell={listForSale} />
-          </>
-        )}
-        {tab === "fixture" && <Fixture />}
-        {tab === "game" && (
-          <div style={{ display: "grid", gap: 28 }}>
-            {activeMatch && identity ? (
-              <PenaltyMatchView
-                match={activeMatch}
-                identity={identity}
-                onBack={() => setActiveMatch(null)}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  width: `${(owned / ALL_NUMBERS.length) * 100}%`,
+                  background: "linear-gradient(90deg, var(--gold), #d4920a)",
+                  transition: "width .5s ease",
+                }}
               />
-            ) : (
+            </div>
+            <span
+              style={{
+                fontSize: 11,
+                color: "var(--gold)",
+                whiteSpace: "nowrap",
+                fontFamily: "var(--condensed)",
+                fontWeight: 900,
+              }}
+            >
+              {owned}/{ALL_NUMBERS.length}
+            </span>
+            <span style={{ fontSize: 10, color: "var(--muted)", fontFamily: "var(--condensed)" }}>
+              {t.collected}
+            </span>
+          </div>
+
+          <main style={{ maxWidth: 720, margin: "0 auto", padding: "18px 20px" }}>
+            {loading && configured && (
+              <p style={{ opacity: 0.5, textAlign: "center" }}>{t.loading}</p>
+            )}
+            {tab === "album" && (
+              <Album
+                ownership={ownership}
+                onClaim={claimPage}
+                onClaimAlbum={claimAlbum}
+                onSell={listForSale}
+                claimedPages={claimedPages}
+              />
+            )}
+            {tab === "packs" && (
               <>
-                <PenaltyGame
-                  pubkey={pubkey}
-                  onGoal={() => { setPenaltyPackPending(true); openFreePack(); }}
-                  onPublish={publishPenalty}
-                  packPending={penaltyPackPending}
+                <Packs
+                  onOpen={openPack}
+                  onDemo={openPackDemo}
+                  onCancel={() => setBusy(false)}
+                  busy={busy}
+                  freePack={{
+                    available: !!pubkey && !hasClaimedFreePack,
+                    onOpen: openFreePack,
+                  }}
                 />
-                <div style={{ borderTop: "1px solid var(--line)", paddingTop: 24 }}>
-                  <PenaltyMatchLobby
-                    identity={identity}
-                    onEnterMatch={setActiveMatch}
-                  />
-                </div>
-                <Leaderboard myPubkey={pubkey} />
+                <MyStickers ownership={ownership} onSell={listForSale} />
               </>
             )}
-          </div>
-        )}
-        {tab === "market" && (
-          <Market
-            listings={visibleListings}
-            settlements={settlements}
-            myOwnership={ownership}
-            myPubkey={pubkey}
-            onBuy={buyListing}
-            onCancel={cancelListing}
-          />
-        )}
-      </main>
+            {tab === "fixture" && <Fixture />}
+            {tab === "game" && (
+              <div style={{ display: "grid", gap: 28 }}>
+                {activeMatch && identity ? (
+                  <PenaltyMatchView
+                    match={activeMatch}
+                    identity={identity}
+                    onBack={() => setActiveMatch(null)}
+                  />
+                ) : (
+                  <>
+                    <PenaltyGame
+                      pubkey={pubkey}
+                      onGoal={() => { setPenaltyPackPending(true); openFreePack(); }}
+                      onPublish={publishPenalty}
+                      packPending={penaltyPackPending}
+                    />
+                    <div style={{ borderTop: "1px solid var(--line)", paddingTop: 24 }}>
+                      <PenaltyMatchLobby
+                        identity={identity}
+                        onEnterMatch={setActiveMatch}
+                      />
+                    </div>
+                    <Leaderboard myPubkey={pubkey} />
+                  </>
+                )}
+              </div>
+            )}
+            {tab === "market" && (
+              <Market
+                listings={visibleListings}
+                settlements={settlements}
+                myOwnership={ownership}
+                myPubkey={pubkey}
+                onBuy={buyListing}
+                onCancel={cancelListing}
+              />
+            )}
+          </main>
+        </>
+      ) : (
+        <LandingPage
+          onPackDemo={openPackDemo}
+          nip07Available={nip07Available}
+          onNip07={connectNip07}
+          onLocal={connectLocal}
+          onLogout={logout}
+          onNip46QR={connectNip46QR}
+          onNip46Bunker={connectNip46Bunker}
+        />
+      )}
 
       {packResult && (
         <PackReveal figus={packResult} onClose={() => setPackResult(null)} />
@@ -804,6 +818,319 @@ function HomeInner() {
     </div>
   );
 }
+
+// ─────────────────────────────────────────
+// LANDING PAGE (pre-login)
+// ─────────────────────────────────────────
+
+function LandingPage({
+  onPackDemo,
+  nip07Available,
+  onNip07,
+  onLocal,
+  onLogout,
+  onNip46QR,
+  onNip46Bunker,
+}: {
+  onPackDemo: () => void;
+  nip07Available: boolean;
+  onNip07: () => void;
+  onLocal: () => void;
+  onLogout: () => void;
+  onNip46QR: (
+    onQR: (uri: string, dataUrl: string, expiresAt: number) => void,
+    onauth: (url: string) => void,
+    signal: AbortSignal
+  ) => Promise<void>;
+  onNip46Bunker: (url: string, onauth: (url: string) => void) => Promise<void>;
+}) {
+  const connectProps = { identity: null, nip07Available, onNip07, onLocal, onLogout, onNip46QR, onNip46Bunker };
+
+  return (
+    <div style={{ maxWidth: 720, margin: "0 auto", padding: "0 20px 80px" }}>
+
+      {/* ── HERO ── */}
+      <section className="fade-in" style={{ textAlign: "center", padding: "56px 0 52px" }}>
+        <img
+          src="/logomundial.png"
+          alt="Figus Mundial 2026"
+          width={88}
+          height={88}
+          style={{ objectFit: "contain", marginBottom: 20, filter: "drop-shadow(0 0 24px rgba(232,185,35,.35))" }}
+        />
+        <h1 style={{
+          fontFamily: "var(--display)",
+          fontSize: "clamp(40px, 10vw, 64px)",
+          color: "var(--gold)",
+          margin: "0 0 6px",
+          lineHeight: 1,
+          letterSpacing: 2,
+        }}>
+          FIGUS
+        </h1>
+        <div style={{
+          fontFamily: "var(--condensed)",
+          fontSize: "clamp(13px, 3vw, 17px)",
+          color: "var(--ink)",
+          fontWeight: 900,
+          letterSpacing: 3,
+          marginBottom: 20,
+        }}>
+          MUNDIAL 2026™
+        </div>
+        <p style={{
+          fontSize: 15,
+          color: "var(--muted)",
+          maxWidth: 460,
+          margin: "0 auto 36px",
+          lineHeight: 1.75,
+        }}>
+          El primer álbum de figuritas del Mundial nativo de{" "}
+          <span style={{ color: "var(--ink)", fontWeight: 700 }}>Nostr</span> y{" "}
+          <span style={{ color: "var(--ink)", fontWeight: 700 }}>Bitcoin</span>.
+          Coleccioná, intercambiá y jugá — todo descentralizado.
+        </p>
+        <div style={{ display: "flex", justifyContent: "center" }}>
+          <Connect {...connectProps} />
+        </div>
+      </section>
+
+      {/* ── DIVISOR ── */}
+      <div style={{ borderTop: "1px solid var(--line)", marginBottom: 52 }} />
+
+      {/* ── CÓMO FUNCIONA ── */}
+      <section style={{ marginBottom: 60 }}>
+        <div style={{
+          fontFamily: "var(--condensed)",
+          fontSize: 10,
+          letterSpacing: 3,
+          color: "var(--muted)",
+          textAlign: "center",
+          marginBottom: 28,
+          fontWeight: 900,
+        }}>
+          CÓMO FUNCIONA
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
+          <FeatureCard
+            icon="📖"
+            color="#e8b923"
+            title="EL ÁLBUM"
+            desc="672 figuritas del Mundial 2026 organizadas en páginas por grupo y selección. Completá páginas para reclamar premios en sats."
+          />
+          <FeatureCard
+            icon="⚡"
+            color="#f5d060"
+            title="SOBRES"
+            desc="Comprá sobres por 21 sats vía Lightning. Cada sobre trae 7 figuritas aleatorias de distintas rarezas. Tu primero es siempre gratis."
+          />
+          <FeatureCard
+            icon="🏷️"
+            color="#52b788"
+            title="MERCADO P2P"
+            desc="Publicá tus repetidas y comprá las que te faltan directamente con otros coleccionistas. Sin intermediarios — todo en Nostr + Lightning."
+          />
+          <FeatureCard
+            icon="⚽"
+            color="#6cc4ee"
+            title="PENALES 3D"
+            desc="Jugá penales en la cancha 3D con WebGL. Si convertís, ganás un sobre. Competí en el ranking global publicado en Nostr."
+          />
+        </div>
+      </section>
+
+      {/* ── DEMO DE SOBRES ── */}
+      <section style={{ marginBottom: 60 }}>
+        <div style={{
+          background: "linear-gradient(135deg, rgba(232,185,35,.07), rgba(232,185,35,.02))",
+          border: "1px solid rgba(232,185,35,.3)",
+          borderRadius: 20,
+          padding: "44px 28px",
+          textAlign: "center",
+        }}>
+          <div style={{ fontSize: 52, marginBottom: 16, lineHeight: 1 }}>🎁</div>
+          <div style={{
+            fontFamily: "var(--display)",
+            fontSize: 22,
+            color: "var(--gold)",
+            marginBottom: 8,
+          }}>
+            PROBÁ ABRIR UN SOBRE
+          </div>
+          <p style={{
+            fontSize: 13,
+            color: "var(--muted)",
+            margin: "0 auto 28px",
+            maxWidth: 380,
+            lineHeight: 1.7,
+          }}>
+            Demo gratuita — sin Lightning ni cuenta de Nostr.
+            7 figuritas aleatorias directamente en tu pantalla.
+          </p>
+          <button
+            onClick={onPackDemo}
+            style={{
+              background: "linear-gradient(135deg, var(--gold), #c8890a)",
+              color: "#030b18",
+              border: "none",
+              padding: "14px 40px",
+              borderRadius: 12,
+              fontSize: 15,
+              fontWeight: 900,
+              fontFamily: "var(--condensed)",
+              letterSpacing: 1,
+              cursor: "pointer",
+              transition: "transform .15s, box-shadow .15s",
+              boxShadow: "0 4px 20px rgba(232,185,35,.25)",
+            }}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.04)";
+              (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 6px 28px rgba(232,185,35,.4)";
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)";
+              (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 20px rgba(232,185,35,.25)";
+            }}
+          >
+            ABRIR SOBRE DEMO
+          </button>
+        </div>
+      </section>
+
+      {/* ── TECH STACK ── */}
+      <section style={{ marginBottom: 60 }}>
+        <div style={{
+          fontFamily: "var(--condensed)",
+          fontSize: 10,
+          letterSpacing: 3,
+          color: "var(--muted)",
+          textAlign: "center",
+          marginBottom: 28,
+          fontWeight: 900,
+        }}>
+          TECNOLOGÍA
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "center" }}>
+          <TechBadge icon="🟣" label="Nostr" desc="Identidad y mercado descentralizado. NIP-07, NIP-46, NIP-01." />
+          <TechBadge icon="⚡" label="Lightning" desc="Micropagos instantáneos. 21 sats por sobre abierto." />
+          <TechBadge icon="₿" label="Bitcoin" desc="La base monetaria. Sin custodios ni intermediarios." />
+          <TechBadge icon="🎮" label="Three.js" desc="Cancha 3D con WebGL para el juego de penales." />
+          <TechBadge icon="▲" label="Next.js 14" desc="Framework React con App Router y Server Components." />
+          <TechBadge icon="📂" label="Open Source" desc="Código 100% abierto — auditá, forkeá, contribuí." />
+        </div>
+      </section>
+
+      {/* ── CTA FINAL ── */}
+      <section style={{
+        textAlign: "center",
+        background: "var(--panel)",
+        border: "1px solid var(--line)",
+        borderRadius: 20,
+        padding: "44px 28px",
+      }}>
+        <div style={{
+          fontFamily: "var(--display)",
+          fontSize: 20,
+          color: "var(--ink)",
+          marginBottom: 10,
+        }}>
+          ¿LISTO PARA EMPEZAR?
+        </div>
+        <p style={{
+          fontSize: 13,
+          color: "var(--muted)",
+          margin: "0 auto 28px",
+          maxWidth: 400,
+          lineHeight: 1.7,
+        }}>
+          Conectate con tu cuenta Nostr. Compatible con{" "}
+          <strong style={{ color: "var(--ink)" }}>Alby</strong>,{" "}
+          <strong style={{ color: "var(--ink)" }}>Amber</strong>,{" "}
+          <strong style={{ color: "var(--ink)" }}>nsec.app</strong>{" "}
+          y cualquier extensión NIP-07.
+        </p>
+        <div style={{ display: "flex", justifyContent: "center" }}>
+          <Connect {...connectProps} />
+        </div>
+        <div style={{ marginTop: 16, fontSize: 11, color: "var(--muted)", fontFamily: "var(--condensed)" }}>
+          Tu clave privada nunca sale de tu dispositivo
+        </div>
+      </section>
+
+    </div>
+  );
+}
+
+function FeatureCard({
+  icon,
+  color,
+  title,
+  desc,
+}: {
+  icon: string;
+  color: string;
+  title: string;
+  desc: string;
+}) {
+  return (
+    <div style={{
+      background: "var(--panel)",
+      border: "1px solid var(--line)",
+      borderRadius: 16,
+      padding: "24px 20px",
+      borderTop: `2px solid ${color}22`,
+    }}>
+      <div style={{ fontSize: 30, marginBottom: 12, lineHeight: 1 }}>{icon}</div>
+      <div style={{
+        fontFamily: "var(--condensed)",
+        fontWeight: 900,
+        fontSize: 13,
+        letterSpacing: 1,
+        color,
+        marginBottom: 8,
+      }}>
+        {title}
+      </div>
+      <p style={{ fontSize: 13, color: "var(--muted)", margin: 0, lineHeight: 1.7 }}>
+        {desc}
+      </p>
+    </div>
+  );
+}
+
+function TechBadge({ icon, label, desc }: { icon: string; label: string; desc: string }) {
+  return (
+    <div style={{
+      background: "var(--panel)",
+      border: "1px solid var(--line)",
+      borderRadius: 12,
+      padding: "14px 16px",
+      display: "flex",
+      alignItems: "flex-start",
+      gap: 10,
+      width: 200,
+    }}>
+      <span style={{ fontSize: 20, flexShrink: 0, lineHeight: 1, marginTop: 1 }}>{icon}</span>
+      <div>
+        <div style={{
+          fontFamily: "var(--condensed)",
+          fontWeight: 900,
+          fontSize: 13,
+          color: "var(--ink)",
+          letterSpacing: 0.4,
+          marginBottom: 3,
+        }}>
+          {label}
+        </div>
+        <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.5 }}>
+          {desc}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────
 
 // Resuelve la Lightning Address (lud16) del perfil kind:0 del vendedor
 async function resolveSellerLnAddress(pubkey: string): Promise<string> {
