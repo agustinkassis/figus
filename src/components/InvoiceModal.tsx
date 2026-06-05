@@ -122,6 +122,30 @@ export function InvoiceModal({
           </div>
         )}
 
+        {/* Open in wallet — deep link for mobile Lightning wallets */}
+        <a
+          href={`lightning:${invoice}`}
+          style={{
+            display: "block",
+            width: "100%",
+            background: "linear-gradient(135deg,var(--grass),var(--pitch))",
+            color: "#fff",
+            border: "none",
+            padding: "11px 0",
+            borderRadius: 10,
+            fontWeight: 900,
+            fontSize: 14,
+            fontFamily: "var(--condensed)",
+            letterSpacing: 0.5,
+            marginBottom: 8,
+            textAlign: "center",
+            textDecoration: "none",
+            boxSizing: "border-box",
+          }}
+        >
+          ⚡ ABRIR EN WALLET
+        </a>
+
         {/* Copy button */}
         <button
           onClick={copyInvoice}

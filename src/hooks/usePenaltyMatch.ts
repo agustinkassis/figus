@@ -89,8 +89,9 @@ export function usePenaltyMatch(
   const commitsRef = useRef<PenaltyCommit[]>([]);
   const blocksRef  = useRef<PenaltyBlock[]>([]);
   const revealsRef = useRef<PenaltyReveal[]>([]);
-  // Nonce temporal del pateador (solo en memoria, no en relays hasta el reveal)
-  const pendingNonce = useRef<string | null>(null);
+  // Zona + nonce del commit del pateador — persiste en localStorage para sobrevivir
+  // recargas de página o el browser bajando el tab en celular.
+  const pendingCommitRef = useRef<{ zone: number; nonce: string } | null>(null);
 
   const rebuild = useCallback((m: PenaltyMatch) => {
     setState(deriveMatchState(m, commitsRef.current, blocksRef.current, revealsRef.current));
@@ -98,9 +99,10 @@ export function usePenaltyMatch(
 
   useEffect(() => {
     if (!match) return;
-    commitsRef.current = [];
-    blocksRef.current  = [];
-    revealsRef.current = [];
+    commitsRef.current     = [];
+    blocksRef.current      = [];
+    revealsRef.current     = [];
+    pendingCommitRef.current = null;
     let cancelled = false;
 
     const coord = `${KIND.PENALTY_MATCH}:${match.challenger}:${match.d}`;
@@ -131,7 +133,14 @@ export function usePenaltyMatch(
     if (!match || !identity) return;
     const nonce  = generateNonce();
     const commit = commitZone(zone, nonce);
-    pendingNonce.current = nonce;
+    pendingCommitRef.current = { zone, nonce };
+    // Persist to localStorage so the reveal works even after a page reload on mobile
+    try {
+      localStorage.setItem(
+        `figus_pcommit_${match.d}`,
+        JSON.stringify({ zone, nonce, round: state?.currentRound ?? 1 })
+      );
+    } catch {}
 
     const coord = `${KIND.PENALTY_MATCH}:${match.challenger}:${match.d}`;
     const roundNum = state?.currentRound ?? 1;
@@ -180,10 +189,27 @@ export function usePenaltyMatch(
     }
   }, [match, identity, state]);
 
-  const publishReveal = useCallback(async (zone: number, commitId: string) => {
-    if (!match || !identity || !pendingNonce.current) return;
-    const coord    = `${KIND.PENALTY_MATCH}:${match.challenger}:${match.d}`;
+  const publishReveal = useCallback(async (commitId: string) => {
+    if (!match || !identity) return;
     const roundNum = state?.currentRound ?? 1;
+
+    // Try in-memory ref first, then recover from localStorage (handles page reload on mobile)
+    let pending = pendingCommitRef.current;
+    if (!pending) {
+      try {
+        const stored = localStorage.getItem(`figus_pcommit_${match.d}`);
+        if (stored) {
+          const data = JSON.parse(stored);
+          if (data.round === roundNum) {
+            pending = { zone: data.zone, nonce: data.nonce };
+            pendingCommitRef.current = pending;
+          }
+        }
+      } catch {}
+    }
+    if (!pending) return;
+
+    const coord = `${KIND.PENALTY_MATCH}:${match.challenger}:${match.d}`;
 
     const tmpl: EventTemplate = {
       kind: KIND.PENALTY_REVEAL,
@@ -193,15 +219,16 @@ export function usePenaltyMatch(
         ["a", coord],
         ["e", commitId],
         ["round", String(roundNum)],
-        ["zone", String(zone)],
-        ["nonce", pendingNonce.current],
+        ["zone", String(pending.zone)],
+        ["nonce", pending.nonce],
       ],
     };
     setPublishing(true);
     try {
       const ev = await signEvent(tmpl, identity.mode);
       await Promise.any(getPool().publish(getRelays(), ev));
-      pendingNonce.current = null;
+      pendingCommitRef.current = null;
+      try { localStorage.removeItem(`figus_pcommit_${match.d}`); } catch {}
     } finally {
       setPublishing(false);
     }

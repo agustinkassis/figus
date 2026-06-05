@@ -164,7 +164,6 @@ export function PenaltyMatchView({
 }) {
   const myPubkey = identity.pubkey;
   const { state, publishing, publishCommit, publishBlock, publishReveal } = usePenaltyMatch(match, identity);
-  const [pendingZone, setPendingZone] = useState<number | null>(null);
 
   // 3D scene state
   const [scenePhase, setScenePhase] = useState<"aim" | "flying" | "result">("aim");
@@ -206,7 +205,6 @@ export function PenaltyMatchView({
   }, [phase, lastCompleted?.number]);
 
   const handleKick = useCallback(async (zone: number) => {
-    setPendingZone(zone);
     await publishCommit(zone);
   }, [publishCommit]);
 
@@ -219,9 +217,8 @@ export function PenaltyMatchView({
   const handleReveal = useCallback(async () => {
     const round = state?.rounds[state.currentRound - 1];
     if (!round?.commit) return;
-    if (pendingZone === null) return;
-    await publishReveal(pendingZone, round.commit.id);
-  }, [state, pendingZone, publishReveal]);
+    await publishReveal(round.commit.id);
+  }, [state, publishReveal]);
 
   if (!state) {
     return (
@@ -295,7 +292,7 @@ export function PenaltyMatchView({
           boxShadow: "inset 0 -4px 0 rgba(0,0,0,.35)",
         }}>
           {phase === "waiting_commit" && iAmKicker && (
-            <AimGrid onKick={(z) => { setPendingZone(z); handleKick(z); }} disabled={publishing} />
+            <AimGrid onKick={handleKick} disabled={publishing} />
           )}
           {phase === "waiting_commit" && !iAmKicker && (
             <div style={{ textAlign: "center", color: "rgba(255,255,255,.5)", fontSize: 12, padding: "10px 0", fontFamily: "var(--condensed)", fontWeight: 700 }}>

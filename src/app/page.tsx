@@ -342,7 +342,7 @@ function HomeInner() {
     setBusy(true);
     try {
       const sellerLn = await resolveSellerLnAddress(listing.seller);
-      const res = await zap(
+      const zapPromise = zap(
         {
           amountSats: listing.price,
           target: { pubkey: listing.seller, lnurlOrAddress: sellerLn },
@@ -354,18 +354,25 @@ function HomeInner() {
           signerMode: identity.mode,
         },
         () => {
-          // Pago confirmado: acreditar la figurita localmente de inmediato.
-          // El issuer publicará el OWNERSHIP en Nostr y mergeOwn lo reconciliará.
           addSticker(listing.stickerNum);
           setInvoice(null);
           notify(`✅ ¡Pago confirmado! La #${listing.stickerNum} fue acreditada a tu álbum`);
           setTimeout(refresh, 3000);
         }
       );
+      // Race against 25s timeout — prevents hanging when Amber/NIP-46 doesn't respond
+      const res = await Promise.race([
+        zapPromise,
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Tiempo de firma agotado. Si usás Amber, abrilo y aprobá la firma.")),
+            25_000
+          )
+        ),
+      ]);
       if (!res.paid) {
         setInvoiceAmount(listing.price);
         setInvoice(res.invoice);
-        notify("Escaneá el invoice para completar la compra");
       }
     } catch (e: any) {
       notify("⚠️ " + (e.message || "Error en la compra"));
