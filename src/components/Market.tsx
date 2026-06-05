@@ -8,6 +8,7 @@ import { useLang } from "@/contexts/LangContext";
 import { Flag } from "./Flag";
 import { Traders } from "./Traders";
 import { StickerFace } from "./StickerCard";
+import { NostrAvatar } from "./NostrAvatar";
 
 export function Market({
   listings,
@@ -140,8 +141,8 @@ export function Market({
                     <div style={{ fontSize: 12, opacity: 0.6 }}>
                       {team.name} · <span style={{ color: r.ring }}>{r.label}</span>
                     </div>
-                    <div style={{ fontSize: 11, opacity: 0.45 }}>
-                      vendedor: {l.seller.slice(0, 12)}…
+                    <div style={{ marginTop: 3 }}>
+                      <NostrAvatar pubkey={l.seller} size={18} fontSize={11} nameColor="var(--muted)" />
                     </div>
                   </div>
                   <button
@@ -274,12 +275,10 @@ function ListingZoom({
               {r.label.toUpperCase()}
             </span>
             <span style={{
-              background: "var(--panel2)", color: "var(--muted)",
-              fontSize: 10, fontWeight: 900,
-              padding: "3px 10px", borderRadius: 99,
-              fontFamily: "var(--condensed)", letterSpacing: 0.3,
+              background: "var(--panel2)",
+              padding: "4px 10px", borderRadius: 99,
             }}>
-              vendedor: {listing.seller.slice(0, 10)}…
+              <NostrAvatar pubkey={listing.seller} size={18} fontSize={10} nameColor="var(--muted)" />
             </span>
           </div>
 

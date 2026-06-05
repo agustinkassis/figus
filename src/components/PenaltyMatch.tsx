@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { nip19, nip05 } from "nostr-tools";
 import type { Identity } from "@/lib/identity";
+import { useProfile } from "@/hooks/useProfile";
 import { ARROWS } from "@/lib/penalty";
 import type { MatchState, Round } from "@/lib/penalty";
 import type { PenaltyMatch as PenaltyMatchType } from "@/lib/penalty";
@@ -102,14 +103,38 @@ function KeeperGrid({ onBlock, disabled }: { onBlock: (col: number) => void; dis
 function Scoreboard({
   state,
   myPubkey,
-  shortName,
 }: {
   state: MatchState;
   myPubkey: string;
-  shortName: (pk: string) => string;
 }) {
   const { match, score, rounds, currentRound } = state;
   const isChallenger = myPubkey === match.challenger;
+  const challengerProfile = useProfile(match.challenger);
+  const challengedProfile = useProfile(match.challenged);
+  const challengerName = challengerProfile?.name || (match.challenger.slice(0, 8) + "…");
+  const challengedName = challengedProfile?.name || (match.challenged.slice(0, 8) + "…");
+
+  function PlayerSide({ picture, name, score: s, isMe }: { picture?: string; name: string; score: number; isMe: boolean }) {
+    return (
+      <div style={{ textAlign: "center", flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, marginBottom: 4 }}>
+          {picture ? (
+            <img src={picture} alt="" style={{ width: 26, height: 26, borderRadius: "50%", objectFit: "cover", border: "1.5px solid var(--gold)", flexShrink: 0 }}
+              onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+          ) : (
+            <div style={{ width: 26, height: 26, borderRadius: "50%", background: "rgba(255,255,255,.08)", border: "1.5px solid rgba(255,255,255,.2)", display: "grid", placeItems: "center", fontSize: 10, fontWeight: 900, color: "rgba(255,255,255,.5)", flexShrink: 0, fontFamily: "var(--condensed)" }}>
+              {name[0]?.toUpperCase() || "?"}
+            </div>
+          )}
+          <div style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,.7)", fontFamily: "var(--condensed)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {name}
+          </div>
+        </div>
+        {isMe && <div style={{ fontSize: 8, color: "rgba(255,255,255,.3)", fontFamily: "var(--condensed)", letterSpacing: 1, marginBottom: 2 }}>VOS</div>}
+        <div style={{ fontSize: 32, fontWeight: 900, color: "var(--gold)", lineHeight: 1 }}>{s}</div>
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -117,14 +142,9 @@ function Scoreboard({
       padding: "10px 14px", marginBottom: 10,
       display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
     }}>
-      <div style={{ textAlign: "center", flex: 1 }}>
-        <div style={{ fontSize: 10, color: "rgba(255,255,255,.45)", fontFamily: "var(--condensed)", marginBottom: 2 }}>
-          {shortName(match.challenger)} {isChallenger ? "(vos)" : ""}
-        </div>
-        <div style={{ fontSize: 32, fontWeight: 900, color: "var(--gold)", lineHeight: 1 }}>{score.challenger}</div>
-      </div>
+      <PlayerSide picture={challengerProfile?.picture} name={challengerName} score={score.challenger} isMe={isChallenger} />
 
-      <div style={{ textAlign: "center" }}>
+      <div style={{ textAlign: "center", flexShrink: 0 }}>
         <div style={{ fontSize: 10, color: "rgba(255,255,255,.4)", fontFamily: "var(--condensed)", letterSpacing: 1 }}>
           RONDA {Math.min(currentRound, match.rounds)}/{match.rounds}
         </div>
@@ -141,12 +161,7 @@ function Scoreboard({
         ))}
       </div>
 
-      <div style={{ textAlign: "center", flex: 1 }}>
-        <div style={{ fontSize: 10, color: "rgba(255,255,255,.45)", fontFamily: "var(--condensed)", marginBottom: 2 }}>
-          {shortName(match.challenged)} {!isChallenger ? "(vos)" : ""}
-        </div>
-        <div style={{ fontSize: 32, fontWeight: 900, color: "var(--gold)", lineHeight: 1 }}>{score.challenged}</div>
-      </div>
+      <PlayerSide picture={challengedProfile?.picture} name={challengedName} score={score.challenged} isMe={!isChallenger} />
     </div>
   );
 }
@@ -170,8 +185,6 @@ export function PenaltyMatchView({
   const [sceneZone, setSceneZone] = useState<number | null>(null);
   const [sceneKeeperCol, setSceneKeeperCol] = useState(1);
   const [sceneIsGoal, setSceneIsGoal] = useState(false);
-
-  const shortName = useCallback((pk: string) => pk.slice(0, 8) + "…", []);
 
   const { phase, rounds } = state ?? { phase: "waiting_commit" as const, rounds: [] };
   const completedRounds = rounds.filter(r => r.result !== null);
@@ -203,6 +216,18 @@ export function PenaltyMatchView({
       return () => clearTimeout(t);
     }
   }, [phase, lastCompleted?.number]);
+
+  // Persist finished match ID so the lobby can show the "FINALIZADO" badge
+  useEffect(() => {
+    if (state?.phase !== "finished") return;
+    try {
+      const key = "figus_finished_matches";
+      const stored: string[] = JSON.parse(localStorage.getItem(key) || "[]");
+      if (!stored.includes(match.id)) {
+        localStorage.setItem(key, JSON.stringify([...stored, match.id]));
+      }
+    } catch {}
+  }, [state?.phase, match.id]);
 
   const handleKick = useCallback(async (zone: number) => {
     await publishCommit(zone);
@@ -258,7 +283,7 @@ export function PenaltyMatchView({
       </div>
 
       {/* Marcador */}
-      <Scoreboard state={state} myPubkey={myPubkey} shortName={shortName} />
+      <Scoreboard state={state} myPubkey={myPubkey} />
 
       {/* Resultado de última ronda */}
       {lastCompleted && scenePhase !== "aim" && (
@@ -370,6 +395,113 @@ export function PenaltyMatchView({
   );
 }
 
+// ─── Tarjetas de partido (usan useProfile para avatar + nombre) ───────────────
+
+function IncomingMatchCard({
+  match,
+  isFinished,
+  onEnterMatch,
+}: {
+  match: PenaltyMatchType;
+  isFinished: boolean;
+  onEnterMatch: (m: PenaltyMatchType) => void;
+}) {
+  const profile = useProfile(match.challenger);
+  const name = profile?.name || (match.challenger.slice(0, 8) + "…");
+  const picture = profile?.picture;
+
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 10,
+      background: isFinished ? "rgba(82,183,136,.04)" : "rgba(232,185,35,.06)",
+      border: `1px solid ${isFinished ? "rgba(82,183,136,.3)" : "rgba(232,185,35,.25)"}`,
+      borderRadius: 10, padding: "10px 12px",
+    }}>
+      {picture ? (
+        <img src={picture} alt="" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", border: "1.5px solid var(--gold)", flexShrink: 0 }}
+          onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+      ) : (
+        <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--panel2)", border: "1.5px solid var(--line)", display: "grid", placeItems: "center", fontSize: 14, color: "var(--muted)", fontWeight: 900, flexShrink: 0, fontFamily: "var(--condensed)" }}>
+          {name[0]?.toUpperCase() || "?"}
+        </div>
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {name}
+        </div>
+        <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
+          {match.rounds} rondas · te desafía
+        </div>
+      </div>
+      {isFinished ? (
+        <div style={{ fontSize: 11, fontWeight: 900, fontFamily: "var(--condensed)", color: "#52b788", flexShrink: 0, display: "flex", alignItems: "center", gap: 4 }}>
+          ✓ FINALIZADO
+        </div>
+      ) : (
+        <button
+          onClick={() => onEnterMatch(match)}
+          style={{ background: "var(--gold)", color: "#030b18", border: "none", padding: "7px 14px", borderRadius: 7, fontWeight: 900, fontSize: 11, cursor: "pointer", flexShrink: 0, fontFamily: "var(--condensed)" }}
+        >JUGAR</button>
+      )}
+    </div>
+  );
+}
+
+function OutgoingMatchCard({
+  match,
+  isFinished,
+  onEnterMatch,
+  onCancel,
+}: {
+  match: PenaltyMatchType;
+  isFinished: boolean;
+  onEnterMatch: (m: PenaltyMatchType) => void;
+  onCancel: (m: PenaltyMatchType) => void;
+}) {
+  const profile = useProfile(match.challenged);
+  const name = profile?.name || (match.challenged.slice(0, 8) + "…");
+  const picture = profile?.picture;
+
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 10,
+      background: "var(--panel)", border: "1px solid var(--line)",
+      borderRadius: 10, padding: "10px 12px",
+    }}>
+      {picture ? (
+        <img src={picture} alt="" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", border: "1.5px solid var(--line)", flexShrink: 0 }}
+          onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+      ) : (
+        <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--panel2)", border: "1.5px solid var(--line)", display: "grid", placeItems: "center", fontSize: 14, color: "var(--muted)", fontWeight: 900, flexShrink: 0, fontFamily: "var(--condensed)" }}>
+          {name[0]?.toUpperCase() || "?"}
+        </div>
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          → {name}
+        </div>
+        <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
+          {match.rounds} rondas · {isFinished ? "finalizado" : "esperando respuesta"}
+        </div>
+      </div>
+      {isFinished ? (
+        <div style={{ fontSize: 11, fontWeight: 900, fontFamily: "var(--condensed)", color: "#52b788", flexShrink: 0 }}>✓</div>
+      ) : (
+        <>
+          <button
+            onClick={() => onEnterMatch(match)}
+            style={{ background: "var(--panel2)", color: "var(--muted)", border: "1px solid var(--line)", padding: "6px 12px", borderRadius: 7, fontWeight: 900, fontSize: 11, cursor: "pointer", flexShrink: 0, fontFamily: "var(--condensed)" }}
+          >VER</button>
+          <button
+            onClick={() => onCancel(match)}
+            style={{ background: "transparent", color: "rgba(255,100,100,.8)", border: "1px solid rgba(255,100,100,.3)", padding: "6px 10px", borderRadius: 7, fontWeight: 900, fontSize: 10, cursor: "pointer", flexShrink: 0, fontFamily: "var(--condensed)" }}
+          >✕</button>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Lobby: desafíos pendientes + crear desafío ───────────────────────────────
 
 export function PenaltyMatchLobby({
@@ -381,6 +513,9 @@ export function PenaltyMatchLobby({
 }) {
   const myPubkey = identity?.pubkey ?? null;
   const { incoming, outgoing, loading } = useOpenMatches(myPubkey);
+  const [finishedIds] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("figus_finished_matches") || "[]"); } catch { return []; }
+  });
   const [challenging, setChallenging]   = useState(false);
   const [inputPk, setInputPk]           = useState("");
   const [inputRounds, setInputRounds]   = useState("3");
@@ -619,31 +754,12 @@ export function PenaltyMatchLobby({
           </div>
           <div style={{ display: "grid", gap: 6 }}>
             {incoming.map(m => (
-              <div
+              <IncomingMatchCard
                 key={m.id}
-                style={{
-                  display: "flex", alignItems: "center", gap: 10,
-                  background: "rgba(232,185,35,.06)", border: "1px solid rgba(232,185,35,.25)",
-                  borderRadius: 10, padding: "10px 12px",
-                }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: "var(--ink)" }}>
-                    {m.challenger.slice(0, 12)}…
-                  </div>
-                  <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
-                    {m.rounds} rondas · te desafía
-                  </div>
-                </div>
-                <button
-                  onClick={() => onEnterMatch(m)}
-                  style={{
-                    background: "var(--gold)", color: "#030b18", border: "none",
-                    padding: "7px 14px", borderRadius: 7,
-                    fontWeight: 900, fontSize: 11, cursor: "pointer",
-                  }}
-                >JUGAR</button>
-              </div>
+                match={m}
+                isFinished={finishedIds.includes(m.id)}
+                onEnterMatch={onEnterMatch}
+              />
             ))}
           </div>
         </div>
@@ -657,41 +773,13 @@ export function PenaltyMatchLobby({
           </div>
           <div style={{ display: "grid", gap: 6 }}>
             {outgoing.map(m => (
-              <div
+              <OutgoingMatchCard
                 key={m.id}
-                style={{
-                  display: "flex", alignItems: "center", gap: 10,
-                  background: "var(--panel)", border: "1px solid var(--line)",
-                  borderRadius: 10, padding: "10px 12px",
-                }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: "var(--ink)" }}>
-                    → {m.challenged.slice(0, 12)}…
-                  </div>
-                  <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
-                    {m.rounds} rondas · esperando respuesta
-                  </div>
-                </div>
-                <button
-                  onClick={() => onEnterMatch(m)}
-                  style={{
-                    background: "var(--panel2)", color: "var(--muted)",
-                    border: "1px solid var(--line)",
-                    padding: "6px 12px", borderRadius: 7,
-                    fontWeight: 900, fontSize: 11, cursor: "pointer",
-                  }}
-                >VER</button>
-                <button
-                  onClick={() => handleCancel(m)}
-                  style={{
-                    background: "transparent", color: "rgba(255,100,100,.8)",
-                    border: "1px solid rgba(255,100,100,.3)",
-                    padding: "6px 10px", borderRadius: 7,
-                    fontWeight: 900, fontSize: 10, cursor: "pointer",
-                  }}
-                >✕</button>
-              </div>
+                match={m}
+                isFinished={finishedIds.includes(m.id)}
+                onEnterMatch={onEnterMatch}
+                onCancel={handleCancel}
+              />
             ))}
           </div>
         </div>
