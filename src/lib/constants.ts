@@ -14,6 +14,7 @@ export const KIND = {
   PENALTY_COMMIT: 1576,  // regular · pateador · compromiso de zona (hash)
   PENALTY_BLOCK:  1577,  // regular · arquero · elección de columna
   PENALTY_REVEAL: 1578,  // regular · pateador · revelación zona + nonce
+  REWARD_CLAIM:   1579,  // regular · usuario · solicitud de premio por página/álbum completo
   ZAP_REQUEST: 9734, // NIP-57
   ZAP_RECEIPT: 9735, // NIP-57
 } as const;

@@ -54,10 +54,20 @@ function HomeInner() {
   const [invoiceAmount, setInvoiceAmount] = useState<number>(0);
   const [showSettings, setShowSettings] = useState(false);
   const [activeMatch, setActiveMatch] = useState<PenaltyMatch | null>(null);
+  const [claimedPages, setClaimedPages] = useState<string[]>([]);
 
   useEffect(() => {
     if (packResult) setPenaltyPackPending(false);
   }, [packResult]);
+
+  // Load which pages have already been claimed (persisted locally to drive button state)
+  useEffect(() => {
+    if (!pubkey) { setClaimedPages([]); return; }
+    try {
+      const raw = localStorage.getItem(`figus_rewards_${pubkey}`);
+      setClaimedPages(raw ? JSON.parse(raw) : []);
+    } catch { setClaimedPages([]); }
+  }, [pubkey]);
 
   const notify = (m: string) => {
     setToast(m);
@@ -381,14 +391,47 @@ function HomeInner() {
     }
   }
 
-  // --- reclamar premio: lo emite el issuer; el cliente solo lo dispara ---
-  async function claimPage(page: Page) {
-    notify(
-      `🏆 Página ${page.name} completa. El issuer emitirá el premio con zap split 70/20/10.`
-    );
-    // En la arquitectura real, el cliente notifica al issuer (endpoint o evento)
-    // y el issuer publica el claim 1575. Ver issuer/index.ts.
+  // --- reclamar premio de página/álbum completo ---
+  async function sendRewardClaim(pageId: string, displayName: string) {
+    if (!identity) return notify("Conectate primero");
+    if (!pubkey) return;
+    setBusy(true);
+    try {
+      const template: EventTemplate = {
+        kind: KIND.REWARD_CLAIM,
+        created_at: Math.floor(Date.now() / 1000),
+        content: "",
+        tags: [
+          ["type",  pageId === "album" ? "album" : "page"],
+          ["page",  pageId],
+          ["a",     addr(KIND.ALBUM, ISSUER_PUBKEY, ALBUM_ID)],
+        ],
+      };
+      const ev = await signEvent(template, identity.mode);
+      const res = await fetch("/api/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event: ev, pageId }),
+      });
+      const data = await res.json() as { ok?: boolean; error?: string; message?: string };
+      if (!res.ok) {
+        notify("⚠️ " + (data.error || "Error al reclamar el premio"));
+        return;
+      }
+      // Persist claimed state so the button flips to "RECLAMADO"
+      const next = [...claimedPages, pageId];
+      setClaimedPages(next);
+      try { localStorage.setItem(`figus_rewards_${pubkey}`, JSON.stringify(next)); } catch {}
+      notify("🏆 " + (data.message || `Premio de ${displayName} enviado.`));
+    } catch (e: any) {
+      notify("⚠️ " + (e.message || "Error al reclamar"));
+    } finally {
+      setBusy(false);
+    }
   }
+
+  function claimPage(page: Page) { return sendRewardClaim(page.id, page.name); }
+  function claimAlbum()          { return sendRewardClaim("album", "álbum completo"); }
 
   const dupesList = useMemo(() => dupes, [dupes]);
 
@@ -596,7 +639,13 @@ function HomeInner() {
           <p style={{ opacity: 0.5, textAlign: "center" }}>{t.loading}</p>
         )}
         {tab === "album" && (
-          <Album ownership={ownership} onClaim={claimPage} onSell={listForSale} />
+          <Album
+            ownership={ownership}
+            onClaim={claimPage}
+            onClaimAlbum={claimAlbum}
+            onSell={listForSale}
+            claimedPages={claimedPages}
+          />
         )}
         {tab === "packs" && (
           <>

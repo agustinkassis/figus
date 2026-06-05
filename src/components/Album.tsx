@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
-  CATALOG, PAGES, RARITY_META, TEAMS, TEAM_FLAGS, TEAM_GROUPS, suggestedPrice,
+  CATALOG, PAGES, RARITY_META, TEAMS, TEAM_FLAGS, TEAM_GROUPS, ALL_NUMBERS, suggestedPrice,
 } from "@/lib/catalog";
 import type { Ownership, Page } from "@/lib/types";
 import { StickerFace } from "./StickerCard";
@@ -26,11 +26,15 @@ type FlipPhase = "idle" | "out" | "in";
 export function Album({
   ownership,
   onClaim,
+  onClaimAlbum,
   onSell,
+  claimedPages = [],
 }: {
   ownership: Ownership;
   onClaim: (page: Page) => void;
+  onClaimAlbum: () => void;
   onSell: (num: number, price: number) => void;
+  claimedPages?: string[];
 }) {
   const [idx,         setIdx]         = useState(0);
   const [flipPhase,   setFlipPhase]   = useState<FlipPhase>("idle");
@@ -62,15 +66,17 @@ export function Album({
     return () => window.removeEventListener("keydown", handler);
   }, [go, idx]);
 
-  const page     = PAGES[idx];
-  const team     = TEAMS[page.id];
-  const flag     = TEAM_FLAGS[page.id] ?? "🏆";
-  const isFwc    = page.id === "fwc";
-  const group    = TEAM_GROUPS[page.id] ?? "";
-  const owned    = page.numbers.filter((n) => (ownership[n] || 0) > 0).length;
-  const total    = page.numbers.length;
-  const complete = owned === total;
-  const pct      = (owned / total) * 100;
+  const page          = PAGES[idx];
+  const team          = TEAMS[page.id];
+  const flag          = TEAM_FLAGS[page.id] ?? "🏆";
+  const isFwc         = page.id === "fwc";
+  const group         = TEAM_GROUPS[page.id] ?? "";
+  const owned         = page.numbers.filter((n) => (ownership[n] || 0) > 0).length;
+  const total         = page.numbers.length;
+  const complete      = owned === total;
+  const pct           = (owned / total) * 100;
+  const albumComplete = ALL_NUMBERS.every((n) => (ownership[n] || 0) > 0);
+  const albumClaimed  = claimedPages.includes("album");
 
   const headerBg = isFwc
     ? "linear-gradient(160deg,#003087 0%,#001450 50%,#0a0030 100%)"
@@ -154,7 +160,10 @@ export function Album({
 
           {isFwc ? (
             /* ── PORTADA ────────────────────────────────────────── */
-            <AlbumCover ownership={ownership} total={total} owned={owned} onZoom={setZoomedNum} />
+            <AlbumCover
+              ownership={ownership} total={total} owned={owned} onZoom={setZoomedNum}
+              albumComplete={albumComplete} albumClaimed={albumClaimed} onClaimAlbum={onClaimAlbum}
+            />
           ) : (
             /* ── Páginas de equipo ──────────────────────────────── */
             <>
@@ -205,21 +214,28 @@ export function Album({
                   </div>
                 </div>
 
-                {complete && (
-                  <button
-                    onClick={() => onClaim(page)}
-                    className="pop-in"
-                    style={{
-                      background: "linear-gradient(135deg,var(--gold),#d4920a)",
-                      color: "#030b18", border: 0,
-                      padding: "8px 14px", borderRadius: 8,
-                      fontWeight: 900, fontSize: 12, fontFamily: "var(--condensed)",
-                      flexShrink: 0, letterSpacing: 0.3,
-                    }}
-                  >
-                    🏆 PREMIO
-                  </button>
-                )}
+                {complete && (() => {
+                  const claimed = claimedPages.includes(page.id);
+                  return (
+                    <button
+                      onClick={() => !claimed && onClaim(page)}
+                      className="pop-in"
+                      style={{
+                        background: claimed
+                          ? "rgba(255,255,255,0.15)"
+                          : "linear-gradient(135deg,var(--gold),#d4920a)",
+                        color: claimed ? "rgba(255,255,255,0.6)" : "#030b18",
+                        border: claimed ? "1px solid rgba(255,255,255,0.2)" : 0,
+                        padding: "8px 14px", borderRadius: 8,
+                        fontWeight: 900, fontSize: 12, fontFamily: "var(--condensed)",
+                        flexShrink: 0, letterSpacing: 0.3,
+                        cursor: claimed ? "default" : "pointer",
+                      }}
+                    >
+                      {claimed ? "✅ RECLAMADO" : "🏆 PREMIO"}
+                    </button>
+                  );
+                })()}
               </div>
 
               {/* Sticker grid */}
@@ -403,7 +419,13 @@ export function Album({
 }
 
 // ─── Portada del álbum (página 0) ─────────────────────────────────────────────
-function AlbumCover({ ownership, total, owned, onZoom }: { ownership: Ownership; total: number; owned: number; onZoom: (n: number) => void }) {
+function AlbumCover({
+  ownership, total, owned, onZoom,
+  albumComplete, albumClaimed, onClaimAlbum,
+}: {
+  ownership: Ownership; total: number; owned: number; onZoom: (n: number) => void;
+  albumComplete: boolean; albumClaimed: boolean; onClaimAlbum: () => void;
+}) {
   const pct = Math.round((owned / total) * 100);
   return (
     <div style={{ position: "relative", overflow: "hidden" }}>
@@ -565,6 +587,25 @@ function AlbumCover({ ownership, total, owned, onZoom }: { ownership: Ownership;
           <div style={{ fontSize: 9, color: "rgba(255,255,255,.4)", fontFamily: "var(--condensed)", letterSpacing: 1, marginTop: 5 }}>
             FIGURAS PEGADAS · {pct}% COMPLETO
           </div>
+          {albumComplete && (
+            <button
+              onClick={() => !albumClaimed && onClaimAlbum()}
+              className="pop-in"
+              style={{
+                marginTop: 12,
+                background: albumClaimed
+                  ? "rgba(255,255,255,0.12)"
+                  : "linear-gradient(135deg,var(--gold),#d4920a)",
+                color: albumClaimed ? "rgba(255,255,255,0.5)" : "#030b18",
+                border: albumClaimed ? "1px solid rgba(255,255,255,0.2)" : "none",
+                padding: "10px 24px", borderRadius: 10,
+                fontWeight: 900, fontSize: 13, fontFamily: "var(--condensed)",
+                letterSpacing: 0.5, cursor: albumClaimed ? "default" : "pointer",
+              }}
+            >
+              {albumClaimed ? "✅ ÁLBUM COMPLETO — RECLAMADO" : "🏆 RECLAMAR PREMIO · ÁLBUM COMPLETO"}
+            </button>
+          )}
         </div>
 
         {/* Borde dorado inferior */}
