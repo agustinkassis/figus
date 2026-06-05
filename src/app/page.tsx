@@ -844,6 +844,7 @@ function LandingPage({
   ) => Promise<void>;
   onNip46Bunker: (url: string, onauth: (url: string) => void) => Promise<void>;
 }) {
+  const { t } = useLang();
   const connectProps = { identity: null, nip07Available, onNip07, onLocal, onLogout, onNip46QR, onNip46Bunker };
 
   return (
@@ -885,10 +886,7 @@ function LandingPage({
           margin: "0 auto 36px",
           lineHeight: 1.75,
         }}>
-          El primer álbum de figuritas del Mundial nativo de{" "}
-          <span style={{ color: "var(--ink)", fontWeight: 700 }}>Nostr</span> y{" "}
-          <span style={{ color: "var(--ink)", fontWeight: 700 }}>Bitcoin</span>.
-          Coleccioná, intercambiá y jugá — todo descentralizado.
+          {t.landing_tagline}
         </p>
         <div style={{ display: "flex", justifyContent: "center" }}>
           <Connect {...connectProps} />
@@ -909,33 +907,13 @@ function LandingPage({
           marginBottom: 28,
           fontWeight: 900,
         }}>
-          CÓMO FUNCIONA
+          {t.landing_how_it_works}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
-          <FeatureCard
-            icon="📖"
-            color="#e8b923"
-            title="EL ÁLBUM"
-            desc="672 figuritas del Mundial 2026 organizadas en páginas por grupo y selección. Completá páginas para reclamar premios en sats."
-          />
-          <FeatureCard
-            icon="⚡"
-            color="#f5d060"
-            title="SOBRES"
-            desc="Comprá sobres por 21 sats vía Lightning. Cada sobre trae 7 figuritas aleatorias de distintas rarezas. Tu primero es siempre gratis."
-          />
-          <FeatureCard
-            icon="🏷️"
-            color="#52b788"
-            title="MERCADO P2P"
-            desc="Publicá tus repetidas y comprá las que te faltan directamente con otros coleccionistas. Sin intermediarios — todo en Nostr + Lightning."
-          />
-          <FeatureCard
-            icon="⚽"
-            color="#6cc4ee"
-            title="PENALES 3D"
-            desc="Jugá penales en la cancha 3D con WebGL. Si convertís, ganás un sobre. Competí en el ranking global publicado en Nostr."
-          />
+          <FeatureCard icon="📖" color="#e8b923" title={t.landing_album_title} desc={t.landing_album_desc} />
+          <FeatureCard icon="⚡" color="#f5d060" title={t.landing_packs_title} desc={t.landing_packs_desc} />
+          <FeatureCard icon="🏷️" color="#52b788" title={t.landing_market_title} desc={t.landing_market_desc} />
+          <FeatureCard icon="⚽" color="#6cc4ee" title={t.landing_game_title} desc={t.landing_game_desc} />
         </div>
       </section>
 
@@ -955,7 +933,7 @@ function LandingPage({
             color: "var(--gold)",
             marginBottom: 8,
           }}>
-            PROBÁ ABRIR UN SOBRE
+            {t.landing_demo_title}
           </div>
           <p style={{
             fontSize: 13,
@@ -964,8 +942,7 @@ function LandingPage({
             maxWidth: 380,
             lineHeight: 1.7,
           }}>
-            Demo gratuita — sin Lightning ni cuenta de Nostr.
-            7 figuritas aleatorias directamente en tu pantalla.
+            {t.landing_demo_desc}
           </p>
           <button
             onClick={onPackDemo}
@@ -992,7 +969,7 @@ function LandingPage({
               (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 20px rgba(232,185,35,.25)";
             }}
           >
-            ABRIR SOBRE DEMO
+            {t.landing_demo_btn}
           </button>
         </div>
       </section>
@@ -1008,15 +985,15 @@ function LandingPage({
           marginBottom: 28,
           fontWeight: 900,
         }}>
-          TECNOLOGÍA
+          {t.landing_tech_title}
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "center" }}>
-          <TechBadge icon="🟣" label="Nostr" desc="Identidad y mercado descentralizado. NIP-07, NIP-46, NIP-01." />
-          <TechBadge icon="⚡" label="Lightning" desc="Micropagos instantáneos. 21 sats por sobre abierto." />
-          <TechBadge icon="₿" label="Bitcoin" desc="La base monetaria. Sin custodios ni intermediarios." />
-          <TechBadge icon="🎮" label="Three.js" desc="Cancha 3D con WebGL para el juego de penales." />
-          <TechBadge icon="▲" label="Next.js 14" desc="Framework React con App Router y Server Components." />
-          <TechBadge icon="📂" label="Open Source" desc="Código 100% abierto — auditá, forkeá, contribuí." />
+          <TechBadge icon="🟣" label="Nostr" desc={t.landing_tech_nostr} />
+          <TechBadge icon="⚡" label="Lightning" desc={t.landing_tech_lightning} />
+          <TechBadge icon="₿" label="Bitcoin" desc={t.landing_tech_bitcoin} />
+          <TechBadge icon="🎮" label="Three.js" desc={t.landing_tech_threejs} />
+          <TechBadge icon="▲" label="Next.js 14" desc={t.landing_tech_nextjs} />
+          <TechBadge icon="📂" label="Open Source" desc={t.landing_tech_oss} />
         </div>
       </section>
 
@@ -1034,7 +1011,7 @@ function LandingPage({
           color: "var(--ink)",
           marginBottom: 10,
         }}>
-          ¿LISTO PARA EMPEZAR?
+          {t.landing_cta_title}
         </div>
         <p style={{
           fontSize: 13,
@@ -1043,17 +1020,13 @@ function LandingPage({
           maxWidth: 400,
           lineHeight: 1.7,
         }}>
-          Conectate con tu cuenta Nostr. Compatible con{" "}
-          <strong style={{ color: "var(--ink)" }}>Alby</strong>,{" "}
-          <strong style={{ color: "var(--ink)" }}>Amber</strong>,{" "}
-          <strong style={{ color: "var(--ink)" }}>nsec.app</strong>{" "}
-          y cualquier extensión NIP-07.
+          {t.landing_cta_desc}
         </p>
         <div style={{ display: "flex", justifyContent: "center" }}>
           <Connect {...connectProps} />
         </div>
         <div style={{ marginTop: 16, fontSize: 11, color: "var(--muted)", fontFamily: "var(--condensed)" }}>
-          Tu clave privada nunca sale de tu dispositivo
+          {t.landing_cta_privacy}
         </div>
       </section>
 

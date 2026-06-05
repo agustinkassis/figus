@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
-  CATALOG, PAGES, RARITY_META, TEAMS, TEAM_FLAGS, TEAM_GROUPS, ALL_NUMBERS, suggestedPrice,
+  CATALOG, PAGES, RARITY_META, TEAMS, TEAM_FLAGS, TEAM_GROUPS, ALL_NUMBERS, suggestedPrice, teamName,
 } from "@/lib/catalog";
 import type { Ownership, Page } from "@/lib/types";
 import { StickerFace } from "./StickerCard";
@@ -42,7 +42,7 @@ export function Album({
   const [cornerHover, setCornerHover] = useState<"next" | "prev" | null>(null);
   const [zoomedNum,   setZoomedNum]   = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const { t } = useLang();
+  const { t, lang } = useLang();
 
   const searchResults = searchQuery.trim().length > 0
     ? PAGES
@@ -186,7 +186,7 @@ export function Album({
                   <Flag team={page.id} height={20} style={{ borderRadius: 2, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 900, fontSize: 12, color: "var(--ink)", fontFamily: "var(--condensed)" }}>
-                      {tm.name}
+                      {teamName(page.id, lang)}
                     </div>
                     <div style={{ fontSize: 9, color: "var(--muted)", fontFamily: "var(--condensed)" }}>
                       {t.album_group_label} {grp} · {ownedCount}/{page.numbers.length}
@@ -216,7 +216,7 @@ export function Album({
             display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
           }}>
             {isFwc ? "🏆 FIFA WORLD CUP 2026™" : (
-              <><Flag team={page.id} height={16} />{team.name.toUpperCase()}</>
+              <><Flag team={page.id} height={16} />{teamName(page.id, lang).toUpperCase()}</>
             )}
           </div>
           <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "var(--condensed)", marginTop: 1 }}>
@@ -274,7 +274,7 @@ export function Album({
                     display: "flex", alignItems: "center", gap: 8,
                   }}>
                     <Flag team={page.id} height={20} style={{ borderRadius: 2 }} />
-                    {team.name.toUpperCase()}
+                    {teamName(page.id, lang).toUpperCase()}
                   </div>
                   <div style={{ fontSize: 11, color: "rgba(255,255,255,.65)", fontFamily: "var(--condensed)", fontWeight: 700, marginTop: 2 }}>
                     {t.album_group_label} {group}

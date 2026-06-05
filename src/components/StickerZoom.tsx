@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CATALOG, RARITY_META, TEAMS, suggestedPrice } from "@/lib/catalog";
+import { CATALOG, RARITY_META, TEAMS, suggestedPrice, teamName } from "@/lib/catalog";
 import { Flag } from "./Flag";
 import { useLang } from "@/contexts/LangContext";
 import { StickerFace } from "./StickerCard";
@@ -18,7 +18,7 @@ export function StickerZoom({
   onClose: () => void;
   onSell?: (num: number, price: number) => void;
 }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const s      = CATALOG[num];
   const r      = RARITY_META[s.rarity];
   const team   = TEAMS[s.team];
@@ -105,7 +105,7 @@ export function StickerZoom({
             fontWeight: 700,
             marginBottom: 10,
           }}>
-            {team.name.toUpperCase()} · #{num}
+            {teamName(s.team, lang).toUpperCase()} · #{num}
           </div>
 
           {/* Rareza + colección */}

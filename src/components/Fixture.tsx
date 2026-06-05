@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { TEAMS, TEAM_GROUPS, PAGES } from "@/lib/catalog";
+import { TEAMS, TEAM_GROUPS, PAGES, teamName } from "@/lib/catalog";
 import { Flag } from "./Flag";
 import { useLang } from "@/contexts/LangContext";
 
@@ -25,29 +25,11 @@ const MD_PAIRS = [
   [[0,3],[1,2]],
 ] as const;
 
-// ─── Group stage matchday metadata ────────────────────────────────────────────
+// ─── Group stage matchday dates (labels come from i18n) ──────────────────────
 const MATCHDAYS = [
-  { label: "Jornada 1", dates: "11 – 17 jun 2026" },
-  { label: "Jornada 2", dates: "19 – 25 jun 2026" },
-  { label: "Jornada 3", dates: "27 jun – 1 jul 2026" },
-];
-
-// ─── Knockout rounds ──────────────────────────────────────────────────────────
-interface KnockoutRound {
-  label: string;
-  dates: string;
-  detail: string;
-  info: string;
-  isFinal?: boolean;
-}
-
-const KNOCKOUT: KnockoutRound[] = [
-  { label: "Ronda de 32",      dates: "3 – 6 jul",   detail: "32 equipos · 16 partidos", info: "Top 2 de cada grupo + 8 mejores terceros" },
-  { label: "Octavos de Final", dates: "8 – 10 jul",  detail: "16 equipos · 8 partidos",  info: "" },
-  { label: "Cuartos de Final", dates: "12 – 13 jul", detail: "8 equipos · 4 partidos",   info: "" },
-  { label: "Semifinales",      dates: "15 – 16 jul", detail: "4 equipos · 2 partidos",   info: "" },
-  { label: "Tercer Puesto",    dates: "18 jul",       detail: "1 partido",                info: "" },
-  { label: "⚽ Gran Final",    dates: "19 jul",       detail: "MetLife Stadium · Nueva York / Nueva Jersey", info: "Partido final del campeonato", isFinal: true },
+  { dates: "11 – 17 jun 2026" },
+  { dates: "19 – 25 jun 2026" },
+  { dates: "27 jun – 1 jul 2026" },
 ];
 
 // ─── Sede mapping (approx, ordered by host) ──────────────────────────────────
@@ -68,7 +50,7 @@ const VENUES: Record<string, string> = {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export function Fixture() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [view,         setView]         = useState<"grupos" | "eliminatorias">("grupos");
   const [activeGroup,  setActiveGroup]  = useState("A");
 
@@ -140,7 +122,7 @@ export function Fixture() {
             ))}
           </div>
 
-          <GroupView group={activeGroup} t={t} />
+          <GroupView group={activeGroup} t={t} lang={lang} />
         </>
       )}
 
@@ -151,7 +133,7 @@ export function Fixture() {
 }
 
 // ─── Group detail view ────────────────────────────────────────────────────────
-function GroupView({ group, t }: { group: string; t: import("@/lib/i18n").Translations }) {
+function GroupView({ group, t, lang }: { group: string; t: import("@/lib/i18n").Translations; lang: string }) {
   const teams = GROUP_TEAMS[group] ?? [];
 
   return (
@@ -177,7 +159,7 @@ function GroupView({ group, t }: { group: string; t: import("@/lib/i18n").Transl
           {t.fixture_group_label} {group} — {t.fixture_teams_label}
         </div>
         {teams.map((code, i) => {
-          const t = TEAMS[code];
+          const team = TEAMS[code];
           return (
             <div
               key={code}
@@ -204,7 +186,7 @@ function GroupView({ group, t }: { group: string; t: import("@/lib/i18n").Transl
                   width: 6,
                   height: 6,
                   borderRadius: "50%",
-                  background: t.color,
+                  background: team.color,
                   flexShrink: 0,
                 }}
               />
@@ -214,7 +196,7 @@ function GroupView({ group, t }: { group: string; t: import("@/lib/i18n").Transl
                 fontSize: 13,
                 color: "var(--ink)",
               }}>
-                {t.name}
+                {teamName(code, lang)}
               </span>
             </div>
           );
@@ -253,10 +235,8 @@ function GroupView({ group, t }: { group: string; t: import("@/lib/i18n").Transl
               const teamA = teams[iA];
               const teamB = teams[iB];
               if (!teamA || !teamB) return null;
-              const tA = TEAMS[teamA];
-              const tB = TEAMS[teamB];
               return (
-                <MatchRow key={matchIdx} teamA={teamA} teamB={teamB} nameA={tA.name} nameB={tB.name} />
+                <MatchRow key={matchIdx} teamA={teamA} teamB={teamB} nameA={teamName(teamA, lang)} nameB={teamName(teamB, lang)} />
               );
             })}
           </div>
@@ -353,6 +333,14 @@ function MatchRow({
 
 // ─── Knockout view ────────────────────────────────────────────────────────────
 function KnockoutView({ t }: { t: import("@/lib/i18n").Translations }) {
+  const rounds = [
+    { label: t.ko_round32, dates: "3 – 6 jul",   detail: t.ko_detail_32, info: t.ko_info_32 },
+    { label: t.ko_round16, dates: "8 – 10 jul",  detail: t.ko_detail_16, info: "" },
+    { label: t.ko_quarter, dates: "12 – 13 jul", detail: t.ko_detail_8,  info: "" },
+    { label: t.ko_semi,    dates: "15 – 16 jul", detail: t.ko_detail_4,  info: "" },
+    { label: t.ko_third,   dates: "18 jul",       detail: t.ko_detail_3rd, info: "" },
+    { label: t.ko_final,   dates: "19 jul",       detail: t.ko_final_venue, info: t.ko_final_info, isFinal: true },
+  ];
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <p style={{
@@ -364,7 +352,7 @@ function KnockoutView({ t }: { t: import("@/lib/i18n").Translations }) {
         {t.fixture_qualify}
       </p>
 
-      {KNOCKOUT.map((round, i) => (
+      {rounds.map((round, i) => (
         <div
           key={i}
           style={{

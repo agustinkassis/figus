@@ -13,7 +13,7 @@ import type { EventTemplate, Event as NostrEvent } from "nostr-tools";
 import { signEvent } from "@/lib/identity";
 import { list, subscribe, getPool, getRelays } from "@/lib/pool";
 import { KIND, ISSUER_PUBKEY } from "@/lib/constants";
-import { CATALOG, RARITY_META, TEAMS } from "@/lib/catalog";
+import { CATALOG, RARITY_META, TEAMS, teamName } from "@/lib/catalog";
 import { StickerFace } from "@/components/StickerCard";
 import { useLang } from "@/contexts/LangContext";
 
@@ -179,7 +179,7 @@ function Scoreboard({
 // ─── Tarjeta de figurita robada/perdida ──────────────────────────────────────
 
 function StolenStickerCard({ num, won }: { num: number; won: boolean }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const s = CATALOG[num];
   const r = s ? RARITY_META[s.rarity] : null;
   const team = s ? TEAMS[s.team] : null;
@@ -213,7 +213,7 @@ function StolenStickerCard({ num, won }: { num: number; won: boolean }) {
             {s.name}
           </div>
           <div style={{ fontSize: 11, color: r.ring, fontWeight: 700, fontFamily: "var(--condensed)" }}>
-            {r.label.toUpperCase()} · {team.name}
+            {r.label.toUpperCase()} · {teamName(s.team, lang)}
           </div>
         </div>
       )}

@@ -324,6 +324,28 @@ TEAMS["fwc"] = { id: "fwc", name: "Copa del Mundo", color: "#b8860b", accent: "#
 // Italia — no está en el WC 2026 pero sí en los campeones históricos (#14)
 TEAMS["ita"] = { id: "ita", name: "Italia",          color: "#003DA5", accent: "#1a1a6e" };
 
+// ─── English team names ───────────────────────────────────────────────────────
+const TEAM_NAMES_EN: Record<string, string> = {
+  mex: "Mexico",        rsa: "South Africa",   kor: "South Korea",
+  cze: "Czech Republic",can: "Canada",          bih: "Bosnia & Herz.",
+  qat: "Qatar",         sui: "Switzerland",     bra: "Brazil",
+  mar: "Morocco",       hai: "Haiti",           sco: "Scotland",
+  usa: "United States", tur: "Turkey",          ger: "Germany",
+  civ: "Ivory Coast",   ned: "Netherlands",     jpn: "Japan",
+  swe: "Sweden",        tun: "Tunisia",         bel: "Belgium",
+  egy: "Egypt",         nzl: "New Zealand",     esp: "Spain",
+  cpv: "Cape Verde",    ksa: "Saudi Arabia",    fra: "France",
+  irq: "Iraq",          nor: "Norway",          alg: "Algeria",
+  jor: "Jordan",        uzb: "Uzbekistan",      eng: "England",
+  cro: "Croatia",       pan: "Panama",          fwc: "World Cup",
+  ita: "Italy",
+};
+
+export function teamName(id: string, lang: string): string {
+  if (lang === "en" && id in TEAM_NAMES_EN) return TEAM_NAMES_EN[id];
+  return TEAMS[id]?.name ?? id;
+}
+
 export const RARITY_META: Record<
   Rarity,
   { label: string; odds: number; ring: string; glow: string }
