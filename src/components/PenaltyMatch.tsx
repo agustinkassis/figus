@@ -752,11 +752,16 @@ export function PenaltyMatchLobby({
   const [resolvedProfile, setResolvedProfile] = useState<{
     pubkey: string; npub: string; name?: string; picture?: string;
   } | null>(null);
+  const [suggestions, setSuggestions] = useState<Array<{
+    pubkey: string; npub: string; name?: string; picture?: string; nip05?: string;
+  }>>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
   // Resolve pubkey live as the user types
   useEffect(() => {
     const input = inputPk.trim();
     setResolvedProfile(null);
+    setSuggestions([]);
     setError(null);
     if (!input) return;
 
@@ -788,31 +793,72 @@ export function PenaltyMatchLobby({
       return;
     }
 
-    // NIP-05 — debounce 700ms
-    if (!input.includes("@")) return;
-    setResolving(true);
+    // NIP-05 full address (user@domain) — debounce 700ms
+    if (input.includes("@")) {
+      setResolving(true);
+      const timer = setTimeout(async () => {
+        try {
+          const pointer = await nip05.queryProfile(input);
+          if (pointer?.pubkey) {
+            const pk = pointer.pubkey;
+            const npub = nip19.npubEncode(pk);
+            setResolvedProfile({ pubkey: pk, npub });
+            setError(null);
+            fetchNostrMeta(pk).then(meta =>
+              setResolvedProfile(prev => prev?.pubkey === pk ? { ...prev, ...meta } : prev)
+            );
+          } else {
+            setError(t.pm_nip05_not_found);
+          }
+        } catch {
+          setError(t.pm_nip05_not_found);
+        } finally {
+          setResolving(false);
+        }
+      }, 700);
+      return () => { clearTimeout(timer); setResolving(false); };
+    }
+
+    // Free-text NIP-50 search (relay.nostr.band) — debounce 400ms
+    if (input.length < 2) return;
+    setLoadingSuggestions(true);
     const timer = setTimeout(async () => {
       try {
-        const pointer = await nip05.queryProfile(input);
-        if (pointer?.pubkey) {
-          const pk = pointer.pubkey;
-          const npub = nip19.npubEncode(pk);
-          setResolvedProfile({ pubkey: pk, npub });
-          setError(null);
-          fetchNostrMeta(pk).then(meta =>
-            setResolvedProfile(prev => prev?.pubkey === pk ? { ...prev, ...meta } : prev)
-          );
-        } else {
-          setError(t.pm_nip05_not_found);
-        }
-      } catch {
-        setError(t.pm_nip05_not_found);
-      } finally {
-        setResolving(false);
+        const pool = getPool();
+        const evs = await pool.querySync(
+          ["wss://relay.nostr.band"],
+          { kinds: [0], search: input, limit: 8 },
+          { maxWait: 3000 }
+        );
+        const seen = new Set<string>();
+        const results = evs.flatMap(ev => {
+          if (seen.has(ev.pubkey)) return [];
+          seen.add(ev.pubkey);
+          try {
+            const m = JSON.parse(ev.content);
+            return [{
+              pubkey: ev.pubkey,
+              npub: nip19.npubEncode(ev.pubkey),
+              name: m.name || m.display_name || m.username,
+              picture: m.picture,
+              nip05: m.nip05,
+            }];
+          } catch { return []; }
+        });
+        setSuggestions(results);
+      } catch { /* silent */ } finally {
+        setLoadingSuggestions(false);
       }
-    }, 700);
-    return () => { clearTimeout(timer); setResolving(false); };
+    }, 400);
+    return () => { clearTimeout(timer); setLoadingSuggestions(false); };
   }, [inputPk]);
+
+  function selectSuggestion(s: { pubkey: string; npub: string; name?: string; picture?: string; nip05?: string }) {
+    setResolvedProfile(s);
+    setInputPk(s.nip05 || s.npub);
+    setSuggestions([]);
+    setError(null);
+  }
 
   async function handleCreate() {
     if (!identity || !resolvedProfile) return;
@@ -872,20 +918,65 @@ export function PenaltyMatchLobby({
           <div style={{ fontSize: 10, color: "var(--muted)", letterSpacing: 0.5, marginBottom: 6 }}>
             {t.pm_opponent_label}
           </div>
-          <textarea
+          <input
             autoFocus
             value={inputPk}
             onChange={e => setInputPk(e.target.value)}
+            onKeyDown={e => e.key === "Escape" && setSuggestions([])}
             placeholder="npub1… · hex · usuario@dominio.com"
-            rows={2}
             style={{
               width: "100%", background: "var(--panel2)",
               border: `1px solid ${error ? "#cc2244" : resolvedProfile ? "rgba(82,183,136,.5)" : "var(--line)"}`,
               borderRadius: 8, padding: "8px 10px",
               color: "var(--ink)", fontSize: 11, fontFamily: "monospace",
-              resize: "none", boxSizing: "border-box", marginBottom: 6, outline: "none",
+              boxSizing: "border-box", marginBottom: 0, outline: "none",
             }}
           />
+
+          {/* NIP-50 autocomplete suggestions */}
+          {(loadingSuggestions || suggestions.length > 0) && !resolvedProfile && (
+            <div style={{
+              background: "var(--panel2)", border: "1px solid var(--line)",
+              borderTop: "none", borderRadius: "0 0 8px 8px",
+              marginBottom: 6, overflow: "hidden",
+            }}>
+              {loadingSuggestions && suggestions.length === 0 && (
+                <div style={{ padding: "8px 10px", fontSize: 10, color: "var(--muted)", fontFamily: "var(--condensed)" }}>…</div>
+              )}
+              {suggestions.map(s => (
+                <div
+                  key={s.pubkey}
+                  onClick={() => selectSuggestion(s)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 8,
+                    padding: "7px 10px", cursor: "pointer",
+                    borderTop: "1px solid var(--line)",
+                  }}
+                  onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = "rgba(232,185,35,.07)"}
+                  onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = "transparent"}
+                >
+                  {s.picture ? (
+                    <img src={s.picture} alt="" style={{ width: 26, height: 26, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+                      onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                  ) : (
+                    <div style={{ width: 26, height: 26, borderRadius: "50%", background: "var(--panel)", display: "grid", placeItems: "center", fontSize: 13, flexShrink: 0 }}>👤</div>
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ink)", fontFamily: "var(--condensed)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {s.name || s.npub.slice(0, 16) + "…"}
+                    </div>
+                    {s.nip05 && (
+                      <div style={{ fontSize: 10, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {s.nip05}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ marginBottom: 6 }} />
 
           {resolving && (
             <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 8 }}>{t.pm_resolving}</div>

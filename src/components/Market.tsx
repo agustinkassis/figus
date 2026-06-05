@@ -46,6 +46,11 @@ export function Market({
         {t.market_subtitle}
       </p>
 
+      {/* ── INTERCAMBIOS ── */}
+      <div style={{ marginBottom: 28, borderBottom: "1px solid var(--line)", paddingBottom: 24 }}>
+        <Traders myOwnership={myOwnership} myPubkey={myPubkey} />
+      </div>
+
       {/* ── COMPRAR/VENDER ── */}
       <>
           {/* Mis ventas activas */}
@@ -186,11 +191,6 @@ export function Market({
             </div>
           )}
         </>
-
-      {/* ── COLECCIONISTAS ── */}
-      <div style={{ marginTop: 32, borderTop: "1px solid var(--line)", paddingTop: 24 }}>
-        <Traders myOwnership={myOwnership} myPubkey={myPubkey} />
-      </div>
 
       {/* ── ZOOM OVERLAY ── */}
       {zoomed && typeof document !== "undefined" && createPortal(
