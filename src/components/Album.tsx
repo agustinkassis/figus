@@ -41,7 +41,18 @@ export function Album({
   const [flipDir,     setFlipDir]     = useState<FlipDir>("next");
   const [cornerHover, setCornerHover] = useState<"next" | "prev" | null>(null);
   const [zoomedNum,   setZoomedNum]   = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const { t } = useLang();
+
+  const searchResults = searchQuery.trim().length > 0
+    ? PAGES
+        .map((p, i) => ({ page: p, idx: i }))
+        .filter(({ page }) =>
+          page.id !== "fwc" &&
+          TEAMS[page.id]?.name.toLowerCase().includes(searchQuery.toLowerCase().trim())
+        )
+        .slice(0, 8)
+    : [];
 
   const go = useCallback((next: number) => {
     if (next < 0 || next >= PAGES.length || next === idx || flipPhase !== "idle") return;
@@ -101,21 +112,97 @@ export function Album({
   return (
     <div className="fade-in" style={{ userSelect: "none" }}>
 
-      {/* ── Group tab strip ─────────────────────────────────────── */}
-      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 10 }}>
-        <GroupTab
-          label={t.album_cover}
-          active={isFwc}
-          onClick={() => go(GROUP_FIRST_PAGE["fwc"])}
-        />
-        {GROUPS_ORDER.map((g) => (
+      {/* ── Group tab strip + buscador ──────────────────────────── */}
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
           <GroupTab
-            key={g}
-            label={`GRP ${g}`}
-            active={!isFwc && group === g}
-            onClick={() => go(GROUP_FIRST_PAGE[g] ?? 0)}
+            label={t.album_cover}
+            active={isFwc}
+            onClick={() => { go(GROUP_FIRST_PAGE["fwc"]); setSearchQuery(""); }}
           />
-        ))}
+          {GROUPS_ORDER.map((g) => (
+            <GroupTab
+              key={g}
+              label={`GRP ${g}`}
+              active={!isFwc && group === g}
+              onClick={() => { go(GROUP_FIRST_PAGE[g] ?? 0); setSearchQuery(""); }}
+            />
+          ))}
+          {/* Buscador */}
+          <div style={{ marginLeft: "auto", position: "relative" }}>
+            <input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="🔍 Equipo…"
+              style={{
+                background: searchQuery ? "var(--panel)" : "transparent",
+                border: `1px solid ${searchQuery ? "var(--gold)" : "var(--line)"}`,
+                borderRadius: 6, padding: "4px 10px",
+                color: "var(--ink)", fontSize: 11,
+                fontFamily: "var(--condensed)", fontWeight: 700,
+                width: searchQuery ? 150 : 100,
+                outline: "none", transition: "width .2s, border-color .2s",
+              }}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                style={{
+                  position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
+                  background: "none", border: "none", color: "var(--muted)",
+                  cursor: "pointer", fontSize: 12, padding: 0, lineHeight: 1,
+                }}
+              >✕</button>
+            )}
+          </div>
+        </div>
+
+        {/* Resultados de búsqueda */}
+        {searchResults.length > 0 && (
+          <div style={{
+            marginTop: 6, background: "var(--panel)",
+            border: "1px solid var(--gold)", borderRadius: 8,
+            overflow: "hidden",
+            boxShadow: "0 4px 16px rgba(0,0,0,.3)",
+          }}>
+            {searchResults.map(({ page, idx: pi }) => {
+              const tm = TEAMS[page.id];
+              const grp = TEAM_GROUPS[page.id];
+              const ownedCount = page.numbers.filter(n => (ownership[n] || 0) > 0).length;
+              return (
+                <button
+                  key={page.id}
+                  onClick={() => { go(pi); setSearchQuery(""); }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 10,
+                    width: "100%", background: "none", border: "none",
+                    borderBottom: "1px solid var(--line)",
+                    padding: "8px 12px", cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(232,185,35,.08)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "none")}
+                >
+                  <Flag team={page.id} height={20} style={{ borderRadius: 2, flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 900, fontSize: 12, color: "var(--ink)", fontFamily: "var(--condensed)" }}>
+                      {tm.name}
+                    </div>
+                    <div style={{ fontSize: 9, color: "var(--muted)", fontFamily: "var(--condensed)" }}>
+                      GRUPO {grp} · {ownedCount}/{page.numbers.length}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--muted)" }}>→</div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {searchQuery.trim() && searchResults.length === 0 && (
+          <div style={{ marginTop: 6, fontSize: 11, color: "var(--muted)", fontFamily: "var(--condensed)", padding: "6px 2px" }}>
+            Sin resultados para "{searchQuery}"
+          </div>
+        )}
       </div>
 
       {/* ── Navigation bar ──────────────────────────────────────── */}
