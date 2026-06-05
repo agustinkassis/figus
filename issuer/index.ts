@@ -2,6 +2,9 @@ import "dotenv/config";
 import type { Event } from "nostr-tools";
 import { RELAYS, ALBUM_ID, pool, publish, issuerPubkey, now, tag } from "./lib";
 import { CATALOG, ALL_NUMBERS, rollSticker } from "../src/lib/catalog";
+import {
+  parseMatch, parseCommit, parseBlock, parseReveal, deriveMatchState,
+} from "../src/lib/penalty";
 
 const KIND = {
   OWNERSHIP: 30100,
@@ -9,6 +12,11 @@ const KIND = {
   LISTING: 30200,
   SETTLEMENT: 1574,
   ZAP_RECEIPT: 9735,
+  PENALTY_MATCH:  30301,
+  PENALTY_COMMIT: 1576,
+  PENALTY_BLOCK:  1577,
+  PENALTY_REVEAL: 1578,
+  STEAL_CLAIM:    1580,
 };
 
 const ISSUER = issuerPubkey();
@@ -198,6 +206,125 @@ async function onReceipt(receipt: Event) {
   }
 }
 
+// ─── Robo de figuritas (penalty match) ───────────────────────────────────────
+
+const stealSeen = new Set<string>(); // coord:winner — dedup en memoria
+
+async function handleStealClaim(ev: Event) {
+  const coord = tag(ev, "a");
+  if (!coord) return console.log("⚠️ steal claim sin coord de partida");
+
+  const seenKey = `${coord}:${ev.pubkey}`;
+  if (stealSeen.has(seenKey)) return;
+  stealSeen.add(seenKey);
+
+  console.log(`🃏 steal claim de ${ev.pubkey.slice(0, 8)}… para ${coord}`);
+
+  // Verificar que no procesamos esto antes (sobrevive reinicios del issuer)
+  const existingSettlements = await listOnce([{
+    kinds: [KIND.SETTLEMENT], authors: [ISSUER], "#p": [ev.pubkey], "#a": [coord],
+  }]);
+  if (existingSettlements.some(e => tag(e, "figus-action") === "penalty-steal")) {
+    return console.log("ℹ️ steal ya procesado anteriormente:", seenKey);
+  }
+
+  // Parsear coord: "30301:challengerPubkey:d"
+  const parts = coord.split(":");
+  if (parts.length < 3) return console.log("⚠️ coord inválido:", coord);
+  const challengerPk = parts[1];
+  const d = parts.slice(2).join(":");
+
+  // Obtener el evento del match
+  const matchEvs = await listOnce([{
+    kinds: [KIND.PENALTY_MATCH], authors: [challengerPk], "#d": [d],
+  }]);
+  const matchEv = matchEvs.sort((a, b) => b.created_at - a.created_at)[0];
+  if (!matchEv) return console.log("⚠️ match event no encontrado:", coord);
+
+  const match = parseMatch(matchEv);
+  if (!match) return console.log("⚠️ no se pudo parsear el match");
+
+  // Obtener eventos de juego (commits, blocks, reveals)
+  const playEvs = await listOnce([{
+    kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": [coord],
+  }]);
+
+  const commits = playEvs
+    .filter(e => e.kind === KIND.PENALTY_COMMIT)
+    .flatMap(e => { const c = parseCommit(e); return c ? [c] : []; });
+  const blocks = playEvs
+    .filter(e => e.kind === KIND.PENALTY_BLOCK)
+    .flatMap(e => { const b = parseBlock(e); return b ? [b] : []; });
+  const reveals = playEvs
+    .filter(e => e.kind === KIND.PENALTY_REVEAL)
+    .flatMap(e => { const r = parseReveal(e); return r ? [r] : []; });
+
+  const state = deriveMatchState(match, commits, blocks, reveals);
+
+  if (state.phase !== "finished") {
+    return console.log("⚠️ match no terminado todavía (phase:", state.phase + ")");
+  }
+  if (!state.winner) {
+    return console.log("⚠️ empate — nadie roba");
+  }
+  if (state.winner !== ev.pubkey) {
+    return console.log(`⚠️ ${ev.pubkey.slice(0, 8)}… no es el ganador (ganó ${state.winner.slice(0, 8)}…)`);
+  }
+
+  const winner = ev.pubkey;
+  const loser = winner === match.challenger ? match.challenged : match.challenger;
+
+  // Obtener las figuritas del perdedor
+  const ownershipEvs = await listOnce([{
+    kinds: [KIND.OWNERSHIP], authors: [ISSUER], "#p": [loser],
+  }]);
+
+  // Agrupar por d-tag, tomar el más reciente por figurita
+  const latestByD = new Map<string, { num: number; count: number; ts: number }>();
+  for (const e of ownershipEvs) {
+    const dTag = tag(e, "d");
+    const stickerTag = tag(e, "sticker");
+    const countStr = tag(e, "count");
+    if (!dTag || !stickerTag || !countStr) continue;
+    const num = Number(stickerTag.split(":")[1]);
+    const count = Number(countStr);
+    const existing = latestByD.get(dTag);
+    if (!existing || e.created_at > existing.ts) {
+      latestByD.set(dTag, { num, count, ts: e.created_at });
+    }
+  }
+
+  const available = [...latestByD.values()]
+    .filter(({ count }) => count > 0)
+    .map(({ num }) => num);
+
+  if (available.length === 0) {
+    return console.log(`ℹ️ ${loser.slice(0, 8)}… no tiene figuritas para robar`);
+  }
+
+  const stolen = available[Math.floor(Math.random() * available.length)];
+
+  await bump(loser, stolen, -1);
+  await bump(winner, stolen, +1);
+
+  await publish({
+    kind: KIND.SETTLEMENT,
+    created_at: now(),
+    content: "",
+    tags: [
+      ["e", ev.id],
+      ["a", coord],
+      ["figus-action", "penalty-steal"],
+      ["sticker", `${ALBUM_ID}:${stolen}`],
+      ["from", loser],
+      ["to", winner],
+      ["p", winner],
+    ],
+  });
+
+  console.log(`🃏 steal: figu #${stolen} de ${loser.slice(0, 8)}… → ${winner.slice(0, 8)}…`);
+}
+
 async function main() {
   console.log("⚡ Issuer Figus escuchando zap receipts…");
   console.log("   pubkey:", ISSUER);
@@ -231,6 +358,13 @@ async function main() {
     RELAYS,
     { kinds: [KIND.ZAP_RECEIPT], since: now() - 60 },
     { onevent: onReceipt }
+  );
+
+  console.log("   Escuchando steal claims (kind 1580)…");
+  pool.subscribeMany(
+    RELAYS,
+    { kinds: [KIND.STEAL_CLAIM], since: now() - 300 },
+    { onevent: (ev) => handleStealClaim(ev).catch(console.error) }
   );
 }
 

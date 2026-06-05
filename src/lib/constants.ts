@@ -15,6 +15,7 @@ export const KIND = {
   PENALTY_BLOCK:  1577,  // regular · arquero · elección de columna
   PENALTY_REVEAL: 1578,  // regular · pateador · revelación zona + nonce
   REWARD_CLAIM:   1579,  // regular · usuario · solicitud de premio por página/álbum completo
+  STEAL_CLAIM:    1580,  // regular · ganador · reclama figurita robada al rival tras ganar penalty
   ZAP_REQUEST: 9734, // NIP-57
   ZAP_RECEIPT: 9735, // NIP-57
 } as const;

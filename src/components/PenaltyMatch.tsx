@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import { nip19, nip05 } from "nostr-tools";
 import type { Identity } from "@/lib/identity";
@@ -9,6 +9,11 @@ import { ARROWS } from "@/lib/penalty";
 import type { MatchState, Round } from "@/lib/penalty";
 import type { PenaltyMatch as PenaltyMatchType } from "@/lib/penalty";
 import { usePenaltyMatch, useOpenMatches, createMatch, cancelMatch } from "@/hooks/usePenaltyMatch";
+import type { EventTemplate, Event as NostrEvent } from "nostr-tools";
+import { signEvent } from "@/lib/identity";
+import { list, subscribe, getPool, getRelays } from "@/lib/pool";
+import { KIND, ISSUER_PUBKEY } from "@/lib/constants";
+import { CATALOG, RARITY_META } from "@/lib/catalog";
 
 const PenaltyScene3D = dynamic(() => import("@/components/PenaltyScene3D"), {
   ssr: false,
@@ -229,6 +234,89 @@ export function PenaltyMatchView({
     } catch {}
   }, [state?.phase, match.id]);
 
+  // ── Robo de figurita ─────────────────────────────────────────────────────────
+  const lsKey = `figus_steal_${match.d}`;
+  const [stealPhase, setStealPhase] = useState<"idle" | "claiming" | "done" | "error">(() => {
+    try { return localStorage.getItem(lsKey) ? "done" : "idle"; } catch { return "idle"; }
+  });
+  const [stolenNum, setStolenNum] = useState<number | null>(() => {
+    try { const v = localStorage.getItem(lsKey); return v ? Number(v) : null; } catch { return null; }
+  });
+  const stealCleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => () => { stealCleanupRef.current?.(); }, []);
+
+  const claimSteal = useCallback(async () => {
+    if (!state || state.winner !== myPubkey) return;
+    setStealPhase("claiming");
+
+    const coord = `${KIND.PENALTY_MATCH}:${match.challenger}:${match.d}`;
+    const loser = myPubkey === match.challenger ? match.challenged : match.challenger;
+    const since = Math.floor(Date.now() / 1000);
+    let resolved = false;
+
+    let unsubFn: (() => void) | null = null;
+    let pollIv: ReturnType<typeof setInterval> | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const cleanup = () => {
+      unsubFn?.();
+      if (pollIv) clearInterval(pollIv);
+      if (timeoutId) clearTimeout(timeoutId);
+      stealCleanupRef.current = null;
+    };
+
+    const handleSettlement = (ev: NostrEvent) => {
+      if (ev.tags.find(t => t[0] === "figus-action")?.[1] !== "penalty-steal") return;
+      const stickerTag = ev.tags.find(t => t[0] === "sticker")?.[1];
+      if (!stickerTag) return;
+      const num = Number(stickerTag.split(":")[1]);
+      if (!num) return;
+      resolved = true;
+      cleanup();
+      setStolenNum(num);
+      setStealPhase("done");
+      try { localStorage.setItem(lsKey, String(num)); } catch {}
+    };
+
+    try {
+      const tmpl: EventTemplate = {
+        kind: KIND.STEAL_CLAIM,
+        created_at: since,
+        content: "",
+        tags: [["a", coord], ["p", loser]],
+      };
+      const signed = await signEvent(tmpl, identity.mode);
+      await Promise.any(getPool().publish(getRelays(), signed));
+    } catch {
+      setStealPhase("error");
+      return;
+    }
+
+    const baseFilter = {
+      kinds: [KIND.SETTLEMENT],
+      "#p": [myPubkey],
+      "#a": [coord],
+      since: since - 5,
+    };
+    const filter = ISSUER_PUBKEY ? { ...baseFilter, authors: [ISSUER_PUBKEY] } : baseFilter;
+
+    unsubFn = subscribe([filter], handleSettlement);
+
+    pollIv = setInterval(async () => {
+      if (resolved) return;
+      const evs = await list([filter]);
+      evs.forEach(handleSettlement);
+    }, 5000);
+
+    timeoutId = setTimeout(() => {
+      if (!resolved) setStealPhase("error");
+      cleanup();
+    }, 30000);
+
+    stealCleanupRef.current = cleanup;
+  }, [match, identity, myPubkey, state, lsKey]);
+
   const handleKick = useCallback(async (zone: number) => {
     await publishCommit(zone);
   }, [publishCommit]);
@@ -379,6 +467,71 @@ export function PenaltyMatchView({
               😔 Perdiste esta vez
             </div>
           )}
+
+          {/* Robo de figurita — sólo al ganador */}
+          {state.winner === myPubkey && (
+            <div style={{ marginTop: 14, marginBottom: 4 }}>
+              {stealPhase === "idle" && (
+                <button
+                  onClick={claimSteal}
+                  style={{
+                    background: "linear-gradient(135deg, rgba(232,185,35,.15), rgba(232,185,35,.06))",
+                    border: "1px solid rgba(232,185,35,.4)",
+                    color: "var(--gold)",
+                    padding: "11px 28px", borderRadius: 10,
+                    fontWeight: 900, fontSize: 14,
+                    fontFamily: "var(--condensed)",
+                    cursor: "pointer", letterSpacing: 0.5,
+                  }}
+                >
+                  🃏 ROBAR FIGURITA AL RIVAL
+                </button>
+              )}
+              {stealPhase === "claiming" && (
+                <div style={{ color: "var(--muted)", fontSize: 12, fontFamily: "var(--condensed)", padding: "8px 0" }}>
+                  ⏳ Enviando al issuer…
+                </div>
+              )}
+              {stealPhase === "done" && stolenNum !== null && (() => {
+                const s = CATALOG[stolenNum];
+                const r = s ? RARITY_META[s.rarity] : null;
+                return (
+                  <div style={{
+                    background: "rgba(82,183,136,.1)", border: "1px solid rgba(82,183,136,.35)",
+                    borderRadius: 10, padding: "12px 16px",
+                    animation: "pop .35s cubic-bezier(.34,1.56,.64,1) both",
+                  }}>
+                    <div style={{ fontSize: 10, color: "#52b788", fontWeight: 900, letterSpacing: 1.5, marginBottom: 4 }}>
+                      🃏 FIGURITA ROBADA
+                    </div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: "var(--ink)" }}>
+                      {s?.name ?? `#${stolenNum}`}
+                    </div>
+                    {r && <div style={{ fontSize: 10, color: r.ring, fontWeight: 700, marginTop: 2 }}>{r.label}</div>}
+                  </div>
+                );
+              })()}
+              {stealPhase === "error" && (
+                <div>
+                  <div style={{ fontSize: 11, color: "rgba(255,100,100,.7)", marginBottom: 6, fontFamily: "var(--condensed)" }}>
+                    El issuer no respondió
+                  </div>
+                  <button
+                    onClick={() => setStealPhase("idle")}
+                    style={{
+                      background: "transparent", border: "1px solid rgba(255,100,100,.3)",
+                      color: "rgba(255,100,100,.7)", padding: "5px 14px",
+                      borderRadius: 7, fontSize: 10, fontFamily: "var(--condensed)",
+                      fontWeight: 700, cursor: "pointer",
+                    }}
+                  >
+                    REINTENTAR
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           <button
             onClick={onBack}
             style={{
