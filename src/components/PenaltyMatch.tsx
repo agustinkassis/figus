@@ -958,36 +958,25 @@ export function PenaltyMatchLobby({
         </button>
       </div>
 
-      {/* Desafío recién enviado — share panel */}
-      {justCreated && identity && (
+      {/* Desafío recién enviado — confirmación */}
+      {justCreated && (
         <div style={{
-          background: "rgba(139,92,246,.08)",
-          border: "1px solid rgba(139,92,246,.3)",
+          background: "rgba(82,183,136,.08)",
+          border: "1px solid rgba(82,183,136,.3)",
           borderRadius: 12, padding: "12px 14px",
-          marginBottom: 14, display: "flex", flexDirection: "column", gap: 8,
+          marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
         }}>
-          <div style={{ fontSize: 12, fontWeight: 900, color: "rgb(167,139,250)" }}>
-            {t.share_challenge_sent}
+          <div style={{ fontSize: 12, color: "rgb(82,183,136)", fontFamily: "var(--condensed)", fontWeight: 700 }}>
+            ✓ {t.share_challenge_sent}
           </div>
-          <div style={{ fontSize: 10, color: "var(--muted)" }}>
-            {t.share_challenge_hint}
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <ShareButton
-              content={`⚽ ${justCreated.name ? `¡Desafié a ${justCreated.name}` : "¡Desafié a alguien"} a una tanda de penales en el álbum del Mundial 2026!\n\nAceptá el desafío en ${SITE_URL} 🎴 #FIFAWorldCup2026 #Figus`}
-              identity={identity}
-              tags={[["p", justCreated.pubkey]]}
-              style={{ flex: 1 }}
-            />
-            <button
-              onClick={() => setJustCreated(null)}
-              style={{
-                background: "transparent", border: "1px solid var(--line)",
-                color: "var(--muted)", padding: "8px 10px", borderRadius: 8,
-                fontSize: 10, cursor: "pointer", fontFamily: "var(--condensed)",
-              }}
-            >✕</button>
-          </div>
+          <button
+            onClick={() => setJustCreated(null)}
+            style={{
+              background: "transparent", border: "1px solid var(--line)",
+              color: "var(--muted)", padding: "4px 8px", borderRadius: 6,
+              fontSize: 10, cursor: "pointer", fontFamily: "var(--condensed)",
+            }}
+          >✕</button>
         </div>
       )}
 
