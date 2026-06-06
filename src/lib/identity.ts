@@ -179,12 +179,18 @@ export async function loginNip46QR(
     perms: ["get_public_key", "sign_event"],
   });
 
-  const dataUrl = await QRCode.toDataURL(uri, {
-    width: 280,
-    margin: 3,
-    color: { dark: "#e8b923", light: "#030b18" },
-    errorCorrectionLevel: "M",
-  });
+  // canvas may be blocked by privacy.resistFingerprinting (LibreWolf, Tor Browser)
+  let dataUrl = "";
+  try {
+    dataUrl = await QRCode.toDataURL(uri, {
+      width: 280,
+      margin: 3,
+      color: { dark: "#e8b923", light: "#030b18" },
+      errorCorrectionLevel: "M",
+    });
+  } catch {
+    // QR image unavailable — caller falls back to showing the URI as text
+  }
 
   const expiresAt = Date.now() + 5 * 60_000;
   onQR(uri, dataUrl, expiresAt);

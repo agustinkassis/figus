@@ -463,8 +463,21 @@ export function Connect({
                           src={qrDataUrl} alt="nostrconnect QR"
                           style={{ width: "100%", height: "100%", display: "block" }}
                         />
+                      ) : qrUri ? (
+                        // Canvas blocked (LibreWolf / Tor Browser) — show URI as text
+                        <div style={{ padding: "12px 8px", textAlign: "center" }}>
+                          <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 8, fontFamily: "var(--condensed)", letterSpacing: 1 }}>
+                            QR no disponible — copiá el URI
+                          </div>
+                          <div style={{
+                            fontSize: 9, color: "var(--gold)", wordBreak: "break-all",
+                            fontFamily: "monospace", lineHeight: 1.5,
+                          }}>
+                            {qrUri.slice(0, 120)}…
+                          </div>
+                        </div>
                       ) : (
-                        <div style={{ color: "var(--gold)", fontSize: 13 }}>Generando QR…</div>
+                        <div style={{ color: "var(--gold)", fontSize: 13 }}>Generando…</div>
                       )}
                     </div>
 
