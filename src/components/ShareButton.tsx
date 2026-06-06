@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import type { Identity } from "@/lib/identity";
-import { shareNote, captureElement, uploadToNostrBuild } from "@/lib/share";
+import { shareNote, captureElement, uploadImage } from "@/lib/share";
 import { useLang } from "@/contexts/LangContext";
 
 type Status = "idle" | "capturing" | "uploading" | "sharing" | "done" | "error";
@@ -18,7 +18,6 @@ export function ShareButton({
   identity: Identity;
   tags?: string[][];
   style?: React.CSSProperties;
-  // When provided, captures this element as an image and attaches it to the note
   cardRef?: React.RefObject<HTMLElement | null>;
 }) {
   const { t } = useLang();
@@ -27,24 +26,20 @@ export function ShareButton({
 
   async function handleShare() {
     if (busy || status === "done") return;
-    setStatus("capturing");
 
     let finalContent = content;
     let finalTags = tags;
 
-    // If a card element is provided, try to capture + upload it
     if (cardRef?.current) {
       try {
         setStatus("capturing");
         const blob = await captureElement(cardRef.current);
         setStatus("uploading");
-        const imageUrl = await uploadToNostrBuild(blob);
-        // Append image URL to content (most clients render it inline)
+        const imageUrl = await uploadImage(blob, identity);
         finalContent = `${content}\n\n${imageUrl}`;
-        // NIP-92 imeta tag for clients that support it
         finalTags = [...tags, ["imeta", `url ${imageUrl}`, "m image/png"]];
       } catch {
-        // Upload failed — still publish the text-only note
+        // Upload failed — publish text-only note
         finalContent = content;
         finalTags = tags;
       }
