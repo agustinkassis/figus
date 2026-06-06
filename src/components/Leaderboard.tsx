@@ -52,7 +52,7 @@ function Avatar({ entry }: { entry: LeaderEntry }) {
   );
 }
 
-export function Leaderboard({ myPubkey }: { myPubkey: string | null }) {
+export function Leaderboard({ myPubkey, onChallenge }: { myPubkey: string | null; onChallenge?: (pubkey: string) => void }) {
   const { entries, loading } = useLeaderboard(true);
 
   const myRank = myPubkey ? entries.findIndex(e => e.pubkey === myPubkey) : -1;
@@ -152,6 +152,23 @@ export function Leaderboard({ myPubkey }: { myPubkey: string | null }) {
                   {e.score}
                   <span style={{ fontSize: 9, color: "var(--muted)", fontWeight: 700, marginLeft: 2 }}>pts</span>
                 </div>
+                {onChallenge && e.pubkey !== myPubkey && (
+                  <button
+                    onClick={() => onChallenge(e.pubkey)}
+                    style={{
+                      marginTop: 8, width: "100%",
+                      background: "rgba(139,92,246,.15)",
+                      border: "1px solid rgba(139,92,246,.4)",
+                      color: "rgb(167,139,250)",
+                      borderRadius: 6, padding: "4px 0",
+                      fontSize: 9, fontWeight: 900,
+                      fontFamily: "var(--condensed)", letterSpacing: 0.5,
+                      cursor: "pointer",
+                    }}
+                  >
+                    ⚽ DESAFIAR
+                  </button>
+                )}
               </div>
             );
           })}
@@ -183,11 +200,29 @@ export function Leaderboard({ myPubkey }: { myPubkey: string | null }) {
             <div style={{ flex: 1, minWidth: 0 }}>
               <Avatar entry={e} />
             </div>
-            <div style={{ textAlign: "right", flexShrink: 0 }}>
-              <div style={{ fontSize: 18, fontWeight: 900, color: "var(--ink)", lineHeight: 1 }}>
-                {e.score}
+            <div style={{ textAlign: "right", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: "var(--ink)", lineHeight: 1 }}>
+                  {e.score}
+                </div>
+                <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 0.5 }}>PTS</div>
               </div>
-              <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 0.5 }}>PTS</div>
+              {onChallenge && e.pubkey !== myPubkey && (
+                <button
+                  onClick={() => onChallenge(e.pubkey)}
+                  style={{
+                    background: "rgba(139,92,246,.15)",
+                    border: "1px solid rgba(139,92,246,.4)",
+                    color: "rgb(167,139,250)",
+                    borderRadius: 6, padding: "4px 8px",
+                    fontSize: 9, fontWeight: 900,
+                    fontFamily: "var(--condensed)", letterSpacing: 0.5,
+                    cursor: "pointer", whiteSpace: "nowrap",
+                  }}
+                >
+                  ⚽ DESAFIAR
+                </button>
+              )}
             </div>
           </div>
         ))}

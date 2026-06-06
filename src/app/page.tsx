@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { EventTemplate } from "nostr-tools";
 import { useIdentity } from "@/hooks/useIdentity";
 import { useGameState } from "@/hooks/useGameState";
-import { useOpenMatches } from "@/hooks/usePenaltyMatch";
+import { useOpenMatches, createMatch } from "@/hooks/usePenaltyMatch";
 import { Connect } from "@/components/Connect";
 import { Album } from "@/components/Album";
 import { Packs, PackReveal } from "@/components/Packs";
@@ -327,6 +327,18 @@ function HomeInner() {
       const ev = await signEvent(template, identity.mode);
       await Promise.any(getPool().publish(getRelays(), ev));
     } catch {}
+  }
+
+  // --- desafiar desde el ranking ---
+  async function challengeFromLeaderboard(targetPubkey: string) {
+    if (!identity) return notify("Conectate para desafiar");
+    if (targetPubkey === pubkey) return;
+    try {
+      await createMatch(identity, targetPubkey, 3);
+      notify("⚽ Desafío enviado");
+    } catch {
+      notify("⚠️ No se pudo enviar el desafío");
+    }
   }
 
   // --- vender repetida: publicar listing 30200 (firmado por el usuario) ---
@@ -805,7 +817,7 @@ function HomeInner() {
                         onEnterMatch={setActiveMatch}
                       />
                     </div>
-                    <Leaderboard myPubkey={pubkey} />
+                    <Leaderboard myPubkey={pubkey} onChallenge={challengeFromLeaderboard} />
 
                     {/* ── TORNEO ── */}
                     <div style={{

@@ -1119,52 +1119,61 @@ export function PenaltyMatchLobby({
         <div style={{ textAlign: "center", color: "var(--muted)", fontSize: 12, padding: 16 }}>{t.pm_loading_matches}</div>
       )}
 
-      {/* Desafíos recibidos */}
-      {incoming.length > 0 && (
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 10, color: "var(--gold)", letterSpacing: 1.5, fontWeight: 900, marginBottom: 8 }}>
-            {t.pm_challenges_incoming}
-          </div>
-          <div style={{ display: "grid", gap: 6 }}>
-            {incoming.map(m => (
-              <IncomingMatchCard
-                key={m.id}
-                match={m}
-                isFinished={finishedIds.includes(m.id)}
-                onEnterMatch={onEnterMatch}
-                onChallenge={startChallenge}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+      {(() => {
+        const allMatches = [
+          ...incoming.map(m => ({ m, isIncoming: true })),
+          ...outgoing.map(m => ({ m, isIncoming: false })),
+        ];
+        const active   = allMatches.filter(({ m }) => !finishedIds.includes(m.id));
+        const finished = allMatches.filter(({ m }) =>  finishedIds.includes(m.id));
 
-      {/* Desafíos enviados */}
-      {outgoing.length > 0 && (
-        <div>
-          <div style={{ fontSize: 10, color: "var(--muted)", letterSpacing: 1.5, fontWeight: 900, marginBottom: 8 }}>
-            {t.pm_challenges_outgoing}
-          </div>
-          <div style={{ display: "grid", gap: 6 }}>
-            {outgoing.map(m => (
-              <OutgoingMatchCard
-                key={m.id}
-                match={m}
-                isFinished={finishedIds.includes(m.id)}
-                onEnterMatch={onEnterMatch}
-                onCancel={handleCancel}
-                onChallenge={startChallenge}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+        const renderCard = ({ m, isIncoming }: { m: PenaltyMatchType; isIncoming: boolean }) =>
+          isIncoming ? (
+            <IncomingMatchCard
+              key={m.id} match={m} isFinished={finishedIds.includes(m.id)}
+              onEnterMatch={onEnterMatch} onChallenge={startChallenge}
+            />
+          ) : (
+            <OutgoingMatchCard
+              key={m.id} match={m} isFinished={finishedIds.includes(m.id)}
+              onEnterMatch={onEnterMatch} onCancel={handleCancel} onChallenge={startChallenge}
+            />
+          );
 
-      {!loading && incoming.length === 0 && outgoing.length === 0 && (
-        <div style={{ textAlign: "center", color: "var(--muted)", fontSize: 12, padding: "12px 0", fontFamily: "var(--condensed)" }}>
-          {t.pm_no_matches}
-        </div>
-      )}
+        return (
+          <>
+            {/* En curso */}
+            {active.length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 10, color: "var(--gold)", letterSpacing: 1.5, fontWeight: 900, marginBottom: 8 }}>
+                  {t.pm_challenges_active}
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  {active.map(renderCard)}
+                </div>
+              </div>
+            )}
+
+            {/* Terminados */}
+            {finished.length > 0 && (
+              <div>
+                <div style={{ fontSize: 10, color: "var(--muted)", letterSpacing: 1.5, fontWeight: 900, marginBottom: 8 }}>
+                  {t.pm_challenges_finished}
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  {finished.map(renderCard)}
+                </div>
+              </div>
+            )}
+
+            {!loading && allMatches.length === 0 && (
+              <div style={{ textAlign: "center", color: "var(--muted)", fontSize: 12, padding: "12px 0", fontFamily: "var(--condensed)" }}>
+                {t.pm_no_matches}
+              </div>
+            )}
+          </>
+        );
+      })()}
     </div>
   );
 }
