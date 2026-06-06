@@ -83,6 +83,7 @@ const T = {
     market_sell:       "vender",
     market_no_offers:  "No hay ofertas abiertas.",
     market_transfers:  "Transferencias confirmadas (1574)",
+    market_i_have_it:  "la tengo",
     market_view_listings: "COMPRAR/VENDER",
     market_view_traders:  "INTERCAMBIAR",
 
@@ -393,6 +394,7 @@ const T = {
     market_sell:       "sell",
     market_no_offers:  "No open offers.",
     market_transfers:  "Confirmed transfers (1574)",
+    market_i_have_it:  "I have it",
     market_view_listings: "BUY/SELL",
     market_view_traders:  "TRADE",
 

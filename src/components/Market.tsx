@@ -113,6 +113,7 @@ export function Market({
               const s = CATALOG[l.stickerNum];
               const r = RARITY_META[s.rarity];
               const team = TEAMS[s.team];
+              const alreadyOwn = (myOwnership[l.stickerNum] ?? 0) > 0;
               return (
                 <div
                   key={l.id}
@@ -146,8 +147,18 @@ export function Market({
                     <div style={{ fontSize: 12, opacity: 0.6 }}>
                       {team.name} · <span style={{ color: r.ring }}>{r.label}</span>
                     </div>
-                    <div style={{ marginTop: 3 }}>
+                    <div style={{ marginTop: 3, display: "flex", alignItems: "center", gap: 6 }}>
                       <NostrAvatar pubkey={l.seller} size={18} fontSize={11} nameColor="var(--muted)" />
+                      {alreadyOwn && (
+                        <span style={{
+                          fontSize: 9, fontFamily: "var(--condensed)", fontWeight: 900,
+                          letterSpacing: 0.5, color: "rgb(34,197,94)",
+                          background: "rgba(34,197,94,.12)", border: "1px solid rgba(34,197,94,.3)",
+                          borderRadius: 99, padding: "2px 7px",
+                        }}>
+                          {t.market_i_have_it}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <button
