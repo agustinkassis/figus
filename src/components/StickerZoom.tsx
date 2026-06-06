@@ -5,25 +5,29 @@ import { CATALOG, RARITY_META, TEAMS, suggestedPrice, teamName } from "@/lib/cat
 import { Flag } from "./Flag";
 import { useLang } from "@/contexts/LangContext";
 import { StickerFace } from "./StickerCard";
-import type { Ownership } from "@/lib/types";
+import type { Listing, Ownership } from "@/lib/types";
 
 export function StickerZoom({
   num,
   ownership,
   onClose,
   onSell,
+  myListings = [],
 }: {
   num: number;
   ownership: Ownership;
   onClose: () => void;
   onSell?: (num: number, price: number) => void;
+  myListings?: Listing[];
 }) {
   const { t, lang } = useLang();
-  const s      = CATALOG[num];
-  const r      = RARITY_META[s.rarity];
-  const team   = TEAMS[s.team];
-  const count  = ownership[num] ?? 0;
-  const extras = count - 1;
+  const s        = CATALOG[num];
+  const r        = RARITY_META[s.rarity];
+  const team     = TEAMS[s.team];
+  const count    = ownership[num] ?? 0;
+  const extras   = count - 1;
+  const isListed = myListings.some(l => l.stickerNum === num);
+  const listedAt = myListings.find(l => l.stickerNum === num)?.price;
   const [sellPrice, setSellPrice] = useState(String(suggestedPrice(num)));
   const [selling,   setSelling]   = useState(false);
 
@@ -140,7 +144,24 @@ export function StickerZoom({
 
           {/* Vender repetida */}
           {extras > 0 && onSell && (
-            selling ? (
+            isListed ? (
+              <div style={{
+                width: "100%",
+                background: "rgba(34,197,94,.1)",
+                border: "1px solid rgba(34,197,94,.4)",
+                color: "rgb(34,197,94)",
+                padding: "9px 0",
+                borderRadius: 8,
+                fontSize: 12,
+                fontWeight: 900,
+                fontFamily: "var(--condensed)",
+                letterSpacing: 0.5,
+                textAlign: "center",
+                marginBottom: 8,
+              }}>
+                {t.zoom_listed}{listedAt ? ` · ⚡ ${listedAt} sats` : ""}
+              </div>
+            ) : selling ? (
               <div style={{ marginBottom: 8 }}>
                 <div style={{
                   fontSize: 10, color: "var(--muted)", fontFamily: "var(--condensed)",

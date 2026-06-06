@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   CATALOG, PAGES, RARITY_META, TEAMS, TEAM_FLAGS, TEAM_GROUPS, ALL_NUMBERS, suggestedPrice, teamName,
 } from "@/lib/catalog";
-import type { Ownership, Page } from "@/lib/types";
+import type { Listing, Ownership, Page } from "@/lib/types";
 import { StickerFace } from "./StickerCard";
 import { StickerZoom } from "./StickerZoom";
 import { Flag } from "./Flag";
@@ -29,13 +29,16 @@ export function Album({
   onClaimAlbum,
   onSell,
   claimedPages = [],
+  myListings = [],
 }: {
   ownership: Ownership;
   onClaim: (page: Page) => void;
   onClaimAlbum: () => void;
   onSell: (num: number, price: number) => void;
   claimedPages?: string[];
+  myListings?: Listing[];
 }) {
+  const listedNums = new Set(myListings.map(l => l.stickerNum));
   const [idx,         setIdx]         = useState(0);
   const [flipPhase,   setFlipPhase]   = useState<FlipPhase>("idle");
   const [flipDir,     setFlipDir]     = useState<FlipDir>("next");
@@ -361,19 +364,31 @@ export function Album({
                           <>
                             <StickerFace num={n} compact />
                             {dupe && (
-                              <button
-                                onClick={() => onSell(n, suggestedPrice(n))}
-                                style={{
+                              listedNums.has(n) ? (
+                                <div style={{
                                   position: "absolute", bottom: 0, left: 0, right: 0,
-                                  background: "rgba(232,185,35,.95)",
-                                  color: "#030b18", border: 0,
-                                  fontSize: 8, fontWeight: 900,
+                                  background: "rgba(34,197,94,.85)",
+                                  color: "#030b18", fontSize: 7, fontWeight: 900,
                                   padding: "3px 0", fontFamily: "var(--condensed)",
-                                  letterSpacing: 0.3,
-                                }}
-                              >
-                                ×{count} · {t.album_sell_dupe}
-                              </button>
+                                  letterSpacing: 0.3, textAlign: "center",
+                                }}>
+                                  {t.album_listed}
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => onSell(n, suggestedPrice(n))}
+                                  style={{
+                                    position: "absolute", bottom: 0, left: 0, right: 0,
+                                    background: "rgba(232,185,35,.95)",
+                                    color: "#030b18", border: 0,
+                                    fontSize: 8, fontWeight: 900,
+                                    padding: "3px 0", fontFamily: "var(--condensed)",
+                                    letterSpacing: 0.3,
+                                  }}
+                                >
+                                  ×{count} · {t.album_sell_dupe}
+                                </button>
+                              )
                             )}
                           </>
                         ) : (
@@ -498,6 +513,7 @@ export function Album({
           ownership={ownership}
           onClose={() => setZoomedNum(null)}
           onSell={onSell}
+          myListings={myListings}
         />
       )}
     </div>

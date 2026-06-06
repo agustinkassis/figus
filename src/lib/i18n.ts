@@ -114,6 +114,7 @@ const T = {
     my_tab_dupes: "REPETIDAS",
     my_tab_all:   "TODAS",
     my_sell:    "VENDER",
+    my_listed:  "✓ EN VENTA",
     my_empty_dupes: "Sin repetidas por ahora · ¡seguí abriendo sobres!",
     my_empty_all:   "Todavía no tenés figuritas",
 
@@ -121,6 +122,7 @@ const T = {
     zoom_in_album: "En tu álbum",
     zoom_copies:   "copias",
     zoom_sell:     "🏷️ VENDER REPETIDA",
+    zoom_listed:   "✓ YA EN VENTA",
     zoom_close:    "CERRAR · ESC",
 
     // Fixture
@@ -162,6 +164,7 @@ const T = {
     album_complete_btn: "🏆 RECLAMAR PREMIO · ÁLBUM COMPLETO",
     album_pct_complete: "COMPLETO",
     album_sell_dupe: "VENDER",
+    album_listed:    "✓ EN VENTA",
 
     // Penalty Game (solo diario)
     pg_title: "⚽ PENAL DIARIO",
@@ -417,6 +420,7 @@ const T = {
     my_tab_dupes: "DUPLICATES",
     my_tab_all:   "ALL",
     my_sell:    "SELL",
+    my_listed:  "✓ LISTED",
     my_empty_dupes: "No duplicates yet · keep opening packs!",
     my_empty_all:   "You don't have any stickers yet",
 
@@ -424,6 +428,7 @@ const T = {
     zoom_in_album: "In your album",
     zoom_copies:   "copies",
     zoom_sell:     "🏷️ SELL DUPLICATE",
+    zoom_listed:   "✓ ALREADY LISTED",
     zoom_close:    "CLOSE · ESC",
 
     // Fixture
@@ -465,6 +470,7 @@ const T = {
     album_complete_btn: "🏆 CLAIM PRIZE · ALBUM COMPLETE",
     album_pct_complete: "COMPLETE",
     album_sell_dupe: "SELL",
+    album_listed:    "✓ LISTED",
 
     // Penalty Game (solo daily)
     pg_title: "⚽ DAILY PENALTY",

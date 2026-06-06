@@ -5,15 +5,18 @@ import { CATALOG, RARITY_META, ALL_NUMBERS, suggestedPrice } from "@/lib/catalog
 import { StickerFace } from "./StickerCard";
 import { StickerZoom } from "./StickerZoom";
 import { useLang } from "@/contexts/LangContext";
-import type { Ownership } from "@/lib/types";
+import type { Listing, Ownership } from "@/lib/types";
 
 export function MyStickers({
   ownership,
   onSell,
+  myListings = [],
 }: {
   ownership: Ownership;
   onSell: (num: number, price: number) => void;
+  myListings?: Listing[];
 }) {
+  const listedNums = new Set(myListings.map(l => l.stickerNum));
   const { t } = useLang();
   const [filter,      setFilter]     = useState<"dupes" | "all">("dupes");
   const [zoomedNum,   setZoomedNum]  = useState<number | null>(null);
@@ -206,6 +209,23 @@ export function MyStickers({
                         </button>
                       </div>
                     </div>
+                  ) : listedNums.has(n) ? (
+                    <div style={{
+                      width: "100%",
+                      marginTop: 5,
+                      background: "rgba(34,197,94,.15)",
+                      border: "1px solid rgba(34,197,94,.5)",
+                      color: "rgb(34,197,94)",
+                      padding: "4px 0",
+                      borderRadius: 6,
+                      fontSize: 9,
+                      fontWeight: 900,
+                      fontFamily: "var(--condensed)",
+                      letterSpacing: 0.3,
+                      textAlign: "center",
+                    }}>
+                      {t.my_listed}
+                    </div>
                   ) : (
                     <button
                       onClick={() => { setSellingNum(n); setSellPrice(String(suggestedPrice(n))); }}
@@ -239,6 +259,7 @@ export function MyStickers({
           num={zoomedNum}
           ownership={ownership}
           onClose={() => setZoomedNum(null)}
+          myListings={myListings}
           onSell={onSell}
         />
       )}

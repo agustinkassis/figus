@@ -305,7 +305,7 @@ function HomeInner() {
   // --- vender repetida: publicar listing 30200 (firmado por el usuario) ---
   async function listForSale(num: number, price: number) {
     if (!identity) return;
-    const d = `sell:${num}:${Date.now()}`;
+    const d = `sell:${num}`;
     const template: EventTemplate = {
       kind: KIND.LISTING,
       created_at: Math.floor(Date.now() / 1000),
@@ -670,6 +670,7 @@ function HomeInner() {
                 onClaimAlbum={claimAlbum}
                 onSell={listForSale}
                 claimedPages={claimedPages}
+                myListings={listings.filter(l => l.seller === pubkey)}
               />
             )}
             {tab === "packs" && (
@@ -684,7 +685,7 @@ function HomeInner() {
                     onOpen: openFreePack,
                   }}
                 />
-                <MyStickers ownership={ownership} onSell={listForSale} />
+                <MyStickers ownership={ownership} onSell={listForSale} myListings={listings.filter(l => l.seller === pubkey)} />
               </>
             )}
             {tab === "fixture" && <Fixture />}
