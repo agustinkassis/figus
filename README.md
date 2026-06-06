@@ -2,6 +2,8 @@
 
 Álbum de figuritas del FIFA World Cup 2026™ construido sobre Nostr + Lightning. Sin base de datos — todo el estado vive en los relays. Desplegado en [figusmundial.rho.vercel.app](https://figusmundial.rho.vercel.app).
 
+![Figus Mundial 2026](public/screenshot.png)
+
 ## Características
 
 - **Sobres** — comprá paquetes de 7 figuritas al azar por 21 sats vía Lightning (NIP-57). El primer sobre es gratis.
