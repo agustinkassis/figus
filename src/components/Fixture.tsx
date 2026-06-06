@@ -20,34 +20,29 @@ PAGES.forEach((p) => {
   }
 });
 
-// Standard round-robin pairs (T1=idx 0 … T4=idx 3)
 const MD_PAIRS = [
   [[0,1],[2,3]],
   [[0,2],[1,3]],
   [[0,3],[1,2]],
 ] as const;
 
-// ─── Schedule ─────────────────────────────────────────────────────────────────
-// MD1 dates per group index (0=A … 11=L)
+// ─── Group stage schedule ─────────────────────────────────────────────────────
 const MD1_DATES = [
   "11 jun","12 jun","13 jun","13 jun",
   "14 jun","14 jun","15 jun","15 jun",
   "16 jun","16 jun","17 jun","17 jun",
 ];
-// MD2 dates per group index
 const MD2_DATES = [
   "19 jun","20 jun","21 jun","21 jun",
   "22 jun","22 jun","23 jun","23 jun",
   "24 jun","24 jun","25 jun","25 jun",
 ];
-// MD3 dates per group index (simultaneous within group)
 const MD3_DATES = [
   "28 jun","28 jun","28 jun",
   "29 jun","29 jun","29 jun",
   "30 jun","30 jun","30 jun",
   "1 jul","1 jul","1 jul",
 ];
-// MD3 UTC hour staggered by position within the day (groups 0,3,6,9 → 16h; 1,4,7,10 → 19h; 2,5,8,11 → 22h)
 const MD3_UTC_HOURS = [16, 19, 22];
 
 type ScheduleInfo = { date: string; utc: string; art: string; simultaneous: boolean };
@@ -55,30 +50,26 @@ type ScheduleInfo = { date: string; utc: string; art: string; simultaneous: bool
 function getSchedule(group: string, mdIdx: number, matchIdx: number): ScheduleInfo {
   const gIdx = GROUPS_ORDER.indexOf(group);
   if (gIdx < 0) return { date: "—", utc: "—", art: "—", simultaneous: false };
-
   let date: string;
   let utcH: number;
   let simultaneous = false;
-
   if (mdIdx === 0) {
-    date = MD1_DATES[gIdx];
-    utcH = matchIdx === 0 ? 16 : 20;
+    date = MD1_DATES[gIdx]; utcH = matchIdx === 0 ? 16 : 20;
   } else if (mdIdx === 1) {
-    date = MD2_DATES[gIdx];
-    utcH = matchIdx === 0 ? 16 : 20;
+    date = MD2_DATES[gIdx]; utcH = matchIdx === 0 ? 16 : 20;
   } else {
-    date = MD3_DATES[gIdx];
-    utcH = MD3_UTC_HOURS[gIdx % 3];
-    simultaneous = true;
+    date = MD3_DATES[gIdx]; utcH = MD3_UTC_HOURS[gIdx % 3]; simultaneous = true;
   }
-
-  const artH = utcH - 3; // min 16-3=13, always positive
-  const utc = `${String(utcH).padStart(2, "0")}:00`;
-  const art = `${String(artH).padStart(2, "0")}:00`;
-  return { date, utc, art, simultaneous };
+  const artH = utcH - 3;
+  return {
+    date,
+    utc: `${String(utcH).padStart(2,"0")}:00`,
+    art: `${String(artH).padStart(2,"0")}:00`,
+    simultaneous,
+  };
 }
 
-// ─── Sedes ────────────────────────────────────────────────────────────────────
+// ─── Venues (group stage) ─────────────────────────────────────────────────────
 const VENUES: Record<string, string> = {
   A: "Estadio Azteca · CDMX / Estadio BBVA · Monterrey",
   B: "BC Place · Vancouver / AT&T Stadium · Dallas",
@@ -94,7 +85,96 @@ const VENUES: Record<string, string> = {
   L: "Estadio Akron · Guadalajara / Lincoln Financial · Filadelfia",
 };
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Knockout bracket data ────────────────────────────────────────────────────
+type KoMatch = {
+  id: string;
+  home: string;
+  away: string;
+  date: string;
+  utcH: number;
+  venue?: string;
+  isFinal?: boolean;
+  note?: string;
+};
+
+type KoRound = {
+  id: string;
+  matches: KoMatch[];
+};
+
+const KO_ROUNDS: KoRound[] = [
+  {
+    id: "r32",
+    matches: [
+      // Jul 3 — grupos A/B
+      { id: "ko-r32-01", home: "1° A", away: "2° B", date: "3 jul", utcH: 14 },
+      { id: "ko-r32-02", home: "1° B", away: "2° A", date: "3 jul", utcH: 17 },
+      { id: "ko-r32-03", home: "1° C", away: "2° D", date: "3 jul", utcH: 20 },
+      { id: "ko-r32-04", home: "1° D", away: "2° C", date: "3 jul", utcH: 23 },
+      // Jul 4 — grupos E/F
+      { id: "ko-r32-05", home: "1° E", away: "2° F", date: "4 jul", utcH: 14 },
+      { id: "ko-r32-06", home: "1° F", away: "2° E", date: "4 jul", utcH: 17 },
+      { id: "ko-r32-07", home: "1° G", away: "2° H", date: "4 jul", utcH: 20 },
+      { id: "ko-r32-08", home: "1° H", away: "2° G", date: "4 jul", utcH: 23 },
+      // Jul 5 — grupos I/J/K/L
+      { id: "ko-r32-09", home: "1° I", away: "2° J", date: "5 jul", utcH: 14 },
+      { id: "ko-r32-10", home: "1° J", away: "2° I", date: "5 jul", utcH: 17 },
+      { id: "ko-r32-11", home: "1° K", away: "2° L", date: "5 jul", utcH: 20 },
+      { id: "ko-r32-12", home: "1° L", away: "2° K", date: "5 jul", utcH: 23 },
+      // Jul 6 — 8 mejores terceros
+      { id: "ko-r32-13", home: "Mejor 3°*", away: "Mejor 3°*", date: "6 jul", utcH: 14, note: "Posiciones TBD según tabla de terceros" },
+      { id: "ko-r32-14", home: "Mejor 3°*", away: "Mejor 3°*", date: "6 jul", utcH: 17, note: "Posiciones TBD según tabla de terceros" },
+      { id: "ko-r32-15", home: "Mejor 3°*", away: "Mejor 3°*", date: "6 jul", utcH: 20, note: "Posiciones TBD según tabla de terceros" },
+      { id: "ko-r32-16", home: "Mejor 3°*", away: "Mejor 3°*", date: "6 jul", utcH: 23, note: "Posiciones TBD según tabla de terceros" },
+    ],
+  },
+  {
+    id: "r16",
+    matches: [
+      // Jul 8
+      { id: "ko-r16-01", home: "W P01", away: "W P02", date: "8 jul", utcH: 14 },
+      { id: "ko-r16-02", home: "W P03", away: "W P04", date: "8 jul", utcH: 18 },
+      { id: "ko-r16-03", home: "W P13", away: "W P14", date: "8 jul", utcH: 22 },
+      // Jul 9
+      { id: "ko-r16-04", home: "W P05", away: "W P06", date: "9 jul", utcH: 14 },
+      { id: "ko-r16-05", home: "W P07", away: "W P08", date: "9 jul", utcH: 18 },
+      { id: "ko-r16-06", home: "W P15", away: "W P16", date: "9 jul", utcH: 22 },
+      // Jul 10
+      { id: "ko-r16-07", home: "W P09", away: "W P10", date: "10 jul", utcH: 16 },
+      { id: "ko-r16-08", home: "W P11", away: "W P12", date: "10 jul", utcH: 20 },
+    ],
+  },
+  {
+    id: "qf",
+    matches: [
+      { id: "ko-qf-01", home: "W O1", away: "W O2", date: "12 jul", utcH: 16 },
+      { id: "ko-qf-02", home: "W O3", away: "W O4", date: "12 jul", utcH: 20 },
+      { id: "ko-qf-03", home: "W O5", away: "W O6", date: "13 jul", utcH: 16 },
+      { id: "ko-qf-04", home: "W O7", away: "W O8", date: "13 jul", utcH: 20 },
+    ],
+  },
+  {
+    id: "sf",
+    matches: [
+      { id: "ko-sf-01", home: "W C1", away: "W C2", date: "15 jul", utcH: 20 },
+      { id: "ko-sf-02", home: "W C3", away: "W C4", date: "16 jul", utcH: 20 },
+    ],
+  },
+  {
+    id: "3rd",
+    matches: [
+      { id: "ko-3rd", home: "Perd. SF1", away: "Perd. SF2", date: "18 jul", utcH: 16, venue: "Estadio Azteca · CDMX" },
+    ],
+  },
+  {
+    id: "final",
+    matches: [
+      { id: "ko-final", home: "W SF1", away: "W SF2", date: "19 jul", utcH: 20, venue: "MetLife Stadium · Nueva York/NJ", isFinal: true },
+    ],
+  },
+];
+
+// ─── Main component ───────────────────────────────────────────────────────────
 export function Fixture({ identity }: { identity?: Identity }) {
   const { t, lang } = useLang();
   const [view,        setView]        = useState<"grupos" | "eliminatorias">("grupos");
@@ -119,22 +199,13 @@ export function Fixture({ identity }: { identity?: Identity }) {
       {/* View toggle */}
       <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
         {(["grupos", "eliminatorias"] as const).map((v) => (
-          <button
-            key={v}
-            onClick={() => setView(v)}
-            style={{
-              background: view === v ? "var(--gold)" : "var(--panel)",
-              color: view === v ? "#030b18" : "var(--muted)",
-              border: `1px solid ${view === v ? "var(--gold)" : "var(--line)"}`,
-              padding: "7px 16px",
-              borderRadius: 8,
-              fontFamily: "var(--condensed)",
-              fontWeight: 900,
-              fontSize: 11,
-              letterSpacing: 1,
-              cursor: "pointer",
-            }}
-          >
+          <button key={v} onClick={() => setView(v)} style={{
+            background: view === v ? "var(--gold)" : "var(--panel)",
+            color: view === v ? "#030b18" : "var(--muted)",
+            border: `1px solid ${view === v ? "var(--gold)" : "var(--line)"}`,
+            padding: "7px 16px", borderRadius: 8,
+            fontFamily: "var(--condensed)", fontWeight: 900, fontSize: 11, letterSpacing: 1, cursor: "pointer",
+          }}>
             {v === "grupos" ? t.fixture_groups : t.fixture_knockout}
           </button>
         ))}
@@ -145,21 +216,13 @@ export function Fixture({ identity }: { identity?: Identity }) {
         <>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 14 }}>
             {GROUPS_ORDER.map((g) => (
-              <button
-                key={g}
-                onClick={() => setActiveGroup(g)}
-                style={{
-                  background: activeGroup === g ? "var(--gold)" : "var(--panel)",
-                  color: activeGroup === g ? "#030b18" : "var(--muted)",
-                  border: `1px solid ${activeGroup === g ? "var(--gold)" : "var(--line)"}`,
-                  padding: "5px 11px",
-                  borderRadius: 6,
-                  fontFamily: "var(--condensed)",
-                  fontWeight: 900,
-                  fontSize: 11,
-                  cursor: "pointer",
-                }}
-              >
+              <button key={g} onClick={() => setActiveGroup(g)} style={{
+                background: activeGroup === g ? "var(--gold)" : "var(--panel)",
+                color: activeGroup === g ? "#030b18" : "var(--muted)",
+                border: `1px solid ${activeGroup === g ? "var(--gold)" : "var(--line)"}`,
+                padding: "5px 11px", borderRadius: 6,
+                fontFamily: "var(--condensed)", fontWeight: 900, fontSize: 11, cursor: "pointer",
+              }}>
                 {t.fixture_group_tab} {g}
               </button>
             ))}
@@ -169,12 +232,14 @@ export function Fixture({ identity }: { identity?: Identity }) {
       )}
 
       {/* ── ELIMINATORIAS ── */}
-      {view === "eliminatorias" && <KnockoutView t={t} />}
+      {view === "eliminatorias" && (
+        <KnockoutView t={t} myPubkey={pubkey} identity={identity} />
+      )}
     </div>
   );
 }
 
-// ─── Group detail view ────────────────────────────────────────────────────────
+// ─── Group stage view ─────────────────────────────────────────────────────────
 function GroupView({
   group, t, lang, myPubkey, identity,
 }: {
@@ -185,7 +250,6 @@ function GroupView({
   identity?: Identity;
 }) {
   const teams = GROUP_TEAMS[group] ?? [];
-
   return (
     <div>
       {/* Team list */}
@@ -196,16 +260,11 @@ function GroupView({
         {teams.map((code, i) => {
           const team = TEAMS[code];
           return (
-            <div
-              key={code}
-              style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: i < teams.length - 1 ? "1px solid var(--line)" : "none" }}
-            >
+            <div key={code} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: i < teams.length - 1 ? "1px solid var(--line)" : "none" }}>
               <span style={{ fontFamily: "var(--condensed)", fontWeight: 900, fontSize: 11, color: "var(--muted)", width: 16 }}>{i + 1}</span>
               <Flag team={code} height={18} />
               <div style={{ width: 6, height: 6, borderRadius: "50%", background: team.color, flexShrink: 0 }} />
-              <span style={{ fontFamily: "var(--condensed)", fontWeight: 700, fontSize: 13, color: "var(--ink)" }}>
-                {teamName(code, lang)}
-              </span>
+              <span style={{ fontFamily: "var(--condensed)", fontWeight: 700, fontSize: 13, color: "var(--ink)" }}>{teamName(code, lang)}</span>
             </div>
           );
         })}
@@ -224,7 +283,6 @@ function GroupView({
               </span>
             )}
           </div>
-
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {MD_PAIRS[mdIdx].map(([iA, iB], matchIdx) => {
               const teamA = teams[iA];
@@ -235,15 +293,10 @@ function GroupView({
               return (
                 <MatchRow
                   key={matchIdx}
-                  teamA={teamA}
-                  teamB={teamB}
-                  nameA={teamName(teamA, lang)}
-                  nameB={teamName(teamB, lang)}
-                  matchId={matchId}
-                  schedule={schedule}
-                  myPubkey={myPubkey}
-                  identity={identity}
-                  t={t}
+                  teamA={teamA} teamB={teamB}
+                  nameA={teamName(teamA, lang)} nameB={teamName(teamB, lang)}
+                  matchId={matchId} schedule={schedule}
+                  myPubkey={myPubkey} identity={identity} t={t}
                 />
               );
             })}
@@ -251,7 +304,6 @@ function GroupView({
         </div>
       ))}
 
-      {/* Venue */}
       {VENUES[group] && (
         <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "var(--condensed)", textAlign: "center", marginTop: 4, padding: "6px 12px", background: "var(--panel)", borderRadius: 8, border: "1px solid var(--line)" }}>
           📍 {VENUES[group]}
@@ -261,254 +313,311 @@ function GroupView({
   );
 }
 
-// ─── Single match row ─────────────────────────────────────────────────────────
+// ─── Group-stage match row ────────────────────────────────────────────────────
 function MatchRow({
   teamA, teamB, nameA, nameB,
   matchId, schedule, myPubkey, identity, t,
 }: {
-  teamA: string;
-  teamB: string;
-  nameA: string;
-  nameB: string;
-  matchId: string;
-  schedule: ScheduleInfo;
-  myPubkey: string | null;
-  identity?: Identity;
+  teamA: string; teamB: string; nameA: string; nameB: string;
+  matchId: string; schedule: ScheduleInfo;
+  myPubkey: string | null; identity?: Identity;
   t: import("@/lib/i18n").Translations;
 }) {
   const { pronos, myProno, publishing, publish } = usePronosticos(matchId, myPubkey);
   const [homeVal, setHomeVal] = useState("");
   const [awayVal, setAwayVal] = useState("");
 
-  // Pre-fill inputs when own prono loads
   useEffect(() => {
-    if (myProno) {
-      setHomeVal(String(myProno.home));
-      setAwayVal(String(myProno.away));
-    }
+    if (myProno) { setHomeVal(String(myProno.home)); setAwayVal(String(myProno.away)); }
   }, [myProno?.home, myProno?.away]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const count = pronos.size;
-  const isDirty =
-    myProno === null ||
-    homeVal !== String(myProno.home) ||
-    awayVal !== String(myProno.away);
+  const isDirty = myProno === null || homeVal !== String(myProno.home) || awayVal !== String(myProno.away);
 
   const handleSave = async () => {
     if (!identity) return;
-    const h = parseInt(homeVal, 10);
-    const a = parseInt(awayVal, 10);
+    const h = parseInt(homeVal, 10), a = parseInt(awayVal, 10);
     if (isNaN(h) || isNaN(a) || h < 0 || a < 0) return;
     await publish(h, a, identity);
   };
 
   return (
     <div style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 12, overflow: "hidden" }}>
-
       {/* Schedule bar */}
-      <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        padding: "6px 12px",
-        background: "var(--panel2)",
-        borderBottom: "1px solid var(--line)",
-      }}>
-        <span style={{ fontFamily: "var(--condensed)", fontSize: 10, color: "var(--muted)", fontWeight: 700 }}>
-          📅 {schedule.date}
-        </span>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 12px", background: "var(--panel2)", borderBottom: "1px solid var(--line)" }}>
+        <span style={{ fontFamily: "var(--condensed)", fontSize: 10, color: "var(--muted)", fontWeight: 700 }}>📅 {schedule.date}</span>
         <span style={{ fontFamily: "var(--condensed)", fontSize: 10, color: "var(--ink)", letterSpacing: 0.3 }}>
           🕐 {schedule.utc} UTC&nbsp;&nbsp;/&nbsp;&nbsp;{schedule.art} ARG
         </span>
       </div>
 
-      {/* Teams + score inputs */}
+      {/* Teams + inputs */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 12px 8px" }}>
-
-        {/* Team A */}
         <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "flex-end" }}>
-          <span style={{ fontFamily: "var(--condensed)", fontWeight: 700, fontSize: 12, color: "var(--ink)", textAlign: "right" }}>
-            {nameA}
-          </span>
+          <span style={{ fontFamily: "var(--condensed)", fontWeight: 700, fontSize: 12, color: "var(--ink)", textAlign: "right" }}>{nameA}</span>
           <Flag team={teamA} height={16} />
         </div>
-
-        {/* Score inputs */}
-        <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-          <input
-            type="number"
-            min={0}
-            max={20}
-            value={homeVal}
-            onChange={(e) => setHomeVal(e.target.value)}
-            placeholder="–"
-            style={{
-              width: 36,
-              height: 36,
-              textAlign: "center",
-              background: "var(--panel2)",
-              border: `1px solid ${homeVal !== "" ? "var(--gold)" : "var(--line)"}`,
-              borderRadius: 8,
-              color: "var(--ink)",
-              fontFamily: "var(--condensed)",
-              fontWeight: 900,
-              fontSize: 16,
-              outline: "none",
-              MozAppearance: "textfield",
-            } as React.CSSProperties}
-          />
-          <span style={{ fontFamily: "var(--condensed)", fontWeight: 900, fontSize: 14, color: "var(--muted)" }}>–</span>
-          <input
-            type="number"
-            min={0}
-            max={20}
-            value={awayVal}
-            onChange={(e) => setAwayVal(e.target.value)}
-            placeholder="–"
-            style={{
-              width: 36,
-              height: 36,
-              textAlign: "center",
-              background: "var(--panel2)",
-              border: `1px solid ${awayVal !== "" ? "var(--gold)" : "var(--line)"}`,
-              borderRadius: 8,
-              color: "var(--ink)",
-              fontFamily: "var(--condensed)",
-              fontWeight: 900,
-              fontSize: 16,
-              outline: "none",
-              MozAppearance: "textfield",
-            } as React.CSSProperties}
-          />
-        </div>
-
-        {/* Team B */}
+        <ScoreInputs homeVal={homeVal} awayVal={awayVal} setHome={setHomeVal} setAway={setAwayVal} />
         <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "flex-start" }}>
           <Flag team={teamB} height={16} />
-          <span style={{ fontFamily: "var(--condensed)", fontWeight: 700, fontSize: 12, color: "var(--ink)" }}>
-            {nameB}
-          </span>
+          <span style={{ fontFamily: "var(--condensed)", fontWeight: 700, fontSize: 12, color: "var(--ink)" }}>{nameB}</span>
         </div>
       </div>
 
-      {/* Save button + count */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 12px 10px", gap: 8 }}>
-        {identity ? (
-          <button
-            onClick={handleSave}
-            disabled={!isDirty || homeVal === "" || awayVal === "" || publishing}
-            style={{
-              background: myProno && !isDirty
-                ? "rgba(34,197,94,.15)"
-                : "rgba(139,92,246,.15)",
-              color: myProno && !isDirty ? "#4ade80" : "#a78bfa",
-              border: `1px solid ${myProno && !isDirty ? "rgba(74,222,128,.3)" : "rgba(167,139,250,.3)"}`,
-              borderRadius: 8,
-              padding: "5px 14px",
-              fontFamily: "var(--condensed)",
-              fontWeight: 900,
-              fontSize: 11,
-              letterSpacing: 0.5,
-              cursor: isDirty && homeVal !== "" && awayVal !== "" && !publishing ? "pointer" : "default",
-              opacity: !isDirty || homeVal === "" || awayVal === "" ? 0.6 : 1,
-              transition: "all .15s",
-            }}
-          >
-            {publishing
-              ? t.prono_saving
-              : myProno && !isDirty
-                ? `✓ ${t.prono_saved}`
-                : t.prono_save}
-          </button>
-        ) : (
-          <span style={{ fontFamily: "var(--condensed)", fontSize: 10, color: "var(--muted)", fontStyle: "italic" }}>
-            {t.prono_connect}
-          </span>
-        )}
-
-        {count > 0 && (
-          <span style={{ fontFamily: "var(--condensed)", fontSize: 10, color: "var(--muted)" }}>
-            👥 {count} {t.prono_count}
-          </span>
-        )}
-      </div>
+      <PronoFooter identity={identity} isDirty={isDirty} homeVal={homeVal} awayVal={awayVal} publishing={publishing} myProno={!!myProno} count={count} onSave={handleSave} t={t} />
     </div>
   );
 }
 
 // ─── Knockout view ────────────────────────────────────────────────────────────
-function KnockoutView({ t }: { t: import("@/lib/i18n").Translations }) {
-  const rounds = [
-    { label: t.ko_round32, dates: "3 – 6 jul",   detail: t.ko_detail_32, info: t.ko_info_32 },
-    { label: t.ko_round16, dates: "8 – 10 jul",  detail: t.ko_detail_16, info: "" },
-    { label: t.ko_quarter, dates: "12 – 13 jul", detail: t.ko_detail_8,  info: "" },
-    { label: t.ko_semi,    dates: "15 – 16 jul", detail: t.ko_detail_4,  info: "" },
-    { label: t.ko_third,   dates: "18 jul",       detail: t.ko_detail_3rd, info: "" },
-    { label: t.ko_final,   dates: "19 jul",       detail: t.ko_final_venue, info: t.ko_final_info, isFinal: true },
-  ];
+function KnockoutView({
+  t, myPubkey, identity,
+}: {
+  t: import("@/lib/i18n").Translations;
+  myPubkey: string | null;
+  identity?: Identity;
+}) {
+  const ROUND_LABELS: Record<string, string> = {
+    r32:   t.ko_round32,
+    r16:   t.ko_round16,
+    qf:    t.ko_quarter,
+    sf:    t.ko_semi,
+    "3rd": t.ko_third,
+    final: t.ko_final,
+  };
+
+  const [activeRound, setActiveRound] = useState("r32");
+  const current = KO_ROUNDS.find((r) => r.id === activeRound)!;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <p style={{ fontSize: 11, color: "var(--muted)", fontFamily: "var(--condensed)", margin: "0 0 6px" }}>
+    <div>
+      <p style={{ fontSize: 11, color: "var(--muted)", fontFamily: "var(--condensed)", margin: "0 0 12px" }}>
         {t.fixture_qualify}
       </p>
 
-      {rounds.map((round, i) => (
-        <div
-          key={i}
-          style={{
-            background: round.isFinal
-              ? "linear-gradient(135deg, rgba(232,185,35,.15), rgba(232,185,35,.05))"
-              : "var(--panel)",
-            border: `1px solid ${round.isFinal ? "var(--gold)" : "var(--line)"}`,
-            borderRadius: 12,
-            padding: "14px 16px",
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-          }}
-        >
-          <div style={{
-            width: 36, height: 36, borderRadius: "50%",
-            background: round.isFinal ? "linear-gradient(135deg,var(--gold),#d4920a)" : "var(--panel2)",
-            border: `1px solid ${round.isFinal ? "var(--gold)" : "var(--line)"}`,
-            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-            fontFamily: "var(--condensed)", fontWeight: 900, fontSize: 12,
-            color: round.isFinal ? "#030b18" : "var(--muted)",
-          }}>
-            {round.isFinal ? "🏆" : i + 1}
-          </div>
+      {/* Round selector */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 16 }}>
+        {KO_ROUNDS.map((r) => (
+          <button
+            key={r.id}
+            onClick={() => setActiveRound(r.id)}
+            style={{
+              background: activeRound === r.id
+                ? (r.id === "final" ? "var(--gold)" : "var(--gold)")
+                : "var(--panel)",
+              color: activeRound === r.id ? "#030b18" : "var(--muted)",
+              border: `1px solid ${activeRound === r.id ? "var(--gold)" : "var(--line)"}`,
+              padding: "5px 10px", borderRadius: 6,
+              fontFamily: "var(--condensed)", fontWeight: 900, fontSize: 10, cursor: "pointer",
+              letterSpacing: 0.5,
+            }}
+          >
+            {ROUND_LABELS[r.id]}
+          </button>
+        ))}
+      </div>
 
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: "var(--condensed)", fontWeight: 900, fontSize: 14, color: round.isFinal ? "var(--gold)" : "var(--ink)", letterSpacing: 0.3 }}>
-              {round.label}
-            </div>
-            <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "var(--condensed)", marginTop: 2 }}>
-              {round.detail}
-            </div>
-            {round.info && (
-              <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "var(--condensed)", marginTop: 2, opacity: 0.7 }}>
-                {round.info}
-              </div>
-            )}
-          </div>
-
-          <div style={{
-            background: round.isFinal ? "var(--gold)" : "var(--panel2)",
-            color: round.isFinal ? "#030b18" : "var(--muted)",
-            fontFamily: "var(--condensed)", fontWeight: 900, fontSize: 10,
-            padding: "4px 10px", borderRadius: 6,
-            border: `1px solid ${round.isFinal ? "var(--gold)" : "var(--line)"}`,
-            whiteSpace: "nowrap", flexShrink: 0, letterSpacing: 0.5,
-          }}>
-            {round.dates}
-          </div>
+      {/* Match count badge */}
+      <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ fontFamily: "var(--condensed)", fontWeight: 900, fontSize: 13, color: "var(--ink)" }}>
+          {ROUND_LABELS[activeRound]}
         </div>
-      ))}
+        <div style={{ background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 6, padding: "2px 8px", fontFamily: "var(--condensed)", fontSize: 10, color: "var(--muted)" }}>
+          {current.matches.length} {current.matches.length === 1 ? "partido" : "partidos"}
+        </div>
+      </div>
 
-      <div style={{ marginTop: 6, padding: "10px 14px", background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 10, fontSize: 10, color: "var(--muted)", fontFamily: "var(--condensed)", lineHeight: 1.6 }}>
+      {/* Match cards */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {current.matches.map((m, i) => (
+          <KoMatchRow
+            key={m.id}
+            match={m}
+            matchNum={i + 1}
+            myPubkey={myPubkey}
+            identity={identity}
+            t={t}
+          />
+        ))}
+      </div>
+
+      {/* Format note at bottom */}
+      <div style={{ marginTop: 14, padding: "10px 14px", background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 10, fontSize: 10, color: "var(--muted)", fontFamily: "var(--condensed)", lineHeight: 1.6 }}>
         <strong style={{ color: "var(--ink)" }}>{t.fixture_format_title}</strong> {t.fixture_format}
       </div>
+    </div>
+  );
+}
+
+// ─── Knockout match card ──────────────────────────────────────────────────────
+function KoMatchRow({
+  match, matchNum, myPubkey, identity, t,
+}: {
+  match: KoMatch;
+  matchNum: number;
+  myPubkey: string | null;
+  identity?: Identity;
+  t: import("@/lib/i18n").Translations;
+}) {
+  const { pronos, myProno, publishing, publish } = usePronosticos(match.id, myPubkey);
+  const [homeVal, setHomeVal] = useState("");
+  const [awayVal, setAwayVal] = useState("");
+
+  useEffect(() => {
+    if (myProno) { setHomeVal(String(myProno.home)); setAwayVal(String(myProno.away)); }
+  }, [myProno?.home, myProno?.away]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const count = pronos.size;
+  const isDirty = myProno === null || homeVal !== String(myProno.home) || awayVal !== String(myProno.away);
+  const artH = match.utcH - 3;
+  const utc = `${String(match.utcH).padStart(2,"0")}:00`;
+  const art = `${String(artH).padStart(2,"0")}:00`;
+
+  const handleSave = async () => {
+    if (!identity) return;
+    const h = parseInt(homeVal, 10), a = parseInt(awayVal, 10);
+    if (isNaN(h) || isNaN(a) || h < 0 || a < 0) return;
+    await publish(h, a, identity);
+  };
+
+  const isFinal = match.isFinal;
+
+  return (
+    <div style={{
+      background: isFinal
+        ? "linear-gradient(135deg, rgba(232,185,35,.12), rgba(232,185,35,.04))"
+        : "var(--panel)",
+      border: `1px solid ${isFinal ? "var(--gold)" : "var(--line)"}`,
+      borderRadius: 12,
+      overflow: "hidden",
+    }}>
+      {/* Schedule bar */}
+      <div style={{
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+        padding: "6px 12px",
+        background: isFinal ? "rgba(232,185,35,.1)" : "var(--panel2)",
+        borderBottom: `1px solid ${isFinal ? "rgba(232,185,35,.3)" : "var(--line)"}`,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontFamily: "var(--condensed)", fontSize: 9, fontWeight: 900, color: "var(--muted)", letterSpacing: 1 }}>
+            P{String(matchNum).padStart(2,"0")}
+          </span>
+          <span style={{ fontFamily: "var(--condensed)", fontSize: 10, color: isFinal ? "var(--gold)" : "var(--muted)", fontWeight: 700 }}>
+            📅 {match.date}
+          </span>
+          {match.venue && (
+            <span style={{ fontFamily: "var(--condensed)", fontSize: 9, color: "var(--muted)" }}>
+              · 📍 {match.venue}
+            </span>
+          )}
+        </div>
+        <span style={{ fontFamily: "var(--condensed)", fontSize: 10, color: "var(--ink)", letterSpacing: 0.3 }}>
+          🕐 {utc} UTC&nbsp;/&nbsp;{art} ARG
+        </span>
+      </div>
+
+      {/* Teams + inputs */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 12px 8px" }}>
+        <div style={{ flex: 1, textAlign: "right" }}>
+          <span style={{
+            fontFamily: "var(--condensed)", fontWeight: 900,
+            fontSize: isFinal ? 14 : 12,
+            color: isFinal ? "var(--gold)" : "var(--ink)",
+            letterSpacing: isFinal ? 0.5 : 0,
+          }}>
+            {match.home}
+          </span>
+        </div>
+        <ScoreInputs homeVal={homeVal} awayVal={awayVal} setHome={setHomeVal} setAway={setAwayVal} />
+        <div style={{ flex: 1, textAlign: "left" }}>
+          <span style={{
+            fontFamily: "var(--condensed)", fontWeight: 900,
+            fontSize: isFinal ? 14 : 12,
+            color: isFinal ? "var(--gold)" : "var(--ink)",
+            letterSpacing: isFinal ? 0.5 : 0,
+          }}>
+            {match.away}
+          </span>
+        </div>
+      </div>
+
+      {match.note && (
+        <div style={{ padding: "0 12px 6px", fontFamily: "var(--condensed)", fontSize: 9, color: "var(--muted)", fontStyle: "italic" }}>
+          * {match.note}
+        </div>
+      )}
+
+      <PronoFooter
+        identity={identity} isDirty={isDirty}
+        homeVal={homeVal} awayVal={awayVal}
+        publishing={publishing} myProno={!!myProno}
+        count={count} onSave={handleSave} t={t}
+      />
+    </div>
+  );
+}
+
+// ─── Shared sub-components ────────────────────────────────────────────────────
+function ScoreInputs({
+  homeVal, awayVal, setHome, setAway,
+}: {
+  homeVal: string; awayVal: string;
+  setHome: (v: string) => void; setAway: (v: string) => void;
+}) {
+  const inputStyle = (filled: boolean): React.CSSProperties => ({
+    width: 36, height: 36, textAlign: "center",
+    background: "var(--panel2)",
+    border: `1px solid ${filled ? "var(--gold)" : "var(--line)"}`,
+    borderRadius: 8, color: "var(--ink)",
+    fontFamily: "var(--condensed)", fontWeight: 900, fontSize: 16,
+    outline: "none", MozAppearance: "textfield",
+  });
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+      <input type="number" min={0} max={20} value={homeVal} onChange={(e) => setHome(e.target.value)} placeholder="–" style={inputStyle(homeVal !== "")} />
+      <span style={{ fontFamily: "var(--condensed)", fontWeight: 900, fontSize: 14, color: "var(--muted)" }}>–</span>
+      <input type="number" min={0} max={20} value={awayVal} onChange={(e) => setAway(e.target.value)} placeholder="–" style={inputStyle(awayVal !== "")} />
+    </div>
+  );
+}
+
+function PronoFooter({
+  identity, isDirty, homeVal, awayVal, publishing, myProno, count, onSave, t,
+}: {
+  identity?: Identity; isDirty: boolean; homeVal: string; awayVal: string;
+  publishing: boolean; myProno: boolean; count: number;
+  onSave: () => void; t: import("@/lib/i18n").Translations;
+}) {
+  const canSave = isDirty && homeVal !== "" && awayVal !== "" && !publishing;
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 12px 10px", gap: 8 }}>
+      {identity ? (
+        <button
+          onClick={onSave}
+          disabled={!canSave}
+          style={{
+            background: myProno && !isDirty ? "rgba(34,197,94,.15)" : "rgba(139,92,246,.15)",
+            color: myProno && !isDirty ? "#4ade80" : "#a78bfa",
+            border: `1px solid ${myProno && !isDirty ? "rgba(74,222,128,.3)" : "rgba(167,139,250,.3)"}`,
+            borderRadius: 8, padding: "5px 14px",
+            fontFamily: "var(--condensed)", fontWeight: 900, fontSize: 11, letterSpacing: 0.5,
+            cursor: canSave ? "pointer" : "default",
+            opacity: canSave ? 1 : 0.6,
+            transition: "all .15s",
+          }}
+        >
+          {publishing ? t.prono_saving : myProno && !isDirty ? `✓ ${t.prono_saved}` : t.prono_save}
+        </button>
+      ) : (
+        <span style={{ fontFamily: "var(--condensed)", fontSize: 10, color: "var(--muted)", fontStyle: "italic" }}>
+          {t.prono_connect}
+        </span>
+      )}
+      {count > 0 && (
+        <span style={{ fontFamily: "var(--condensed)", fontSize: 10, color: "var(--muted)" }}>
+          👥 {count} {t.prono_count}
+        </span>
+      )}
     </div>
   );
 }
