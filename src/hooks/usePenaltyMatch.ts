@@ -310,3 +310,46 @@ function ingestEvent(
     if (r && !revealsRef.current.find(x => x.id === r.id)) revealsRef.current = [...revealsRef.current, r];
   }
 }
+
+// ─── Hook liviano: ¿es mi turno en esta partida? ──────────────────────────────
+// Hace un list() de los eventos de la partida y devuelve true/false/null (null = cargando)
+export function useMatchTurn(match: PenaltyMatch, myPubkey: string | null): boolean | null {
+  const [myTurn, setMyTurn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!myPubkey) { setMyTurn(false); return; }
+    let cancelled = false;
+    const coord = `${KIND.PENALTY_MATCH}:${match.challenger}:${match.d}`;
+
+    (async () => {
+      const evs = await list([
+        { kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": [coord] },
+      ]);
+
+      if (cancelled) return;
+
+      const commits = evs.map(parseCommit).filter((c): c is PenaltyCommit => c !== null);
+      const blocks  = evs.map(parseBlock).filter((b): b is PenaltyBlock  => b !== null);
+      const reveals = evs.map(parseReveal).filter((r): r is PenaltyReveal => r !== null);
+
+      const state = deriveMatchState(match, commits, blocks, reveals);
+      if (state.phase === "finished") { setMyTurn(false); return; }
+
+      const r = state.currentRound;
+      const kicker = r % 2 === 1 ? match.challenger : match.challenged;
+      const keeper  = r % 2 === 1 ? match.challenged : match.challenger;
+
+      const turn =
+        state.phase === "waiting_commit" ? myPubkey === kicker :
+        state.phase === "waiting_block"  ? myPubkey === keeper  :
+        state.phase === "waiting_reveal" ? myPubkey === kicker  :
+        false;
+
+      setMyTurn(turn);
+    })();
+
+    return () => { cancelled = true; };
+  }, [match, myPubkey]);
+
+  return myTurn;
+}

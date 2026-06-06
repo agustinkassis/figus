@@ -8,7 +8,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { ARROWS } from "@/lib/penalty";
 import type { MatchState, Round } from "@/lib/penalty";
 import type { PenaltyMatch as PenaltyMatchType } from "@/lib/penalty";
-import { usePenaltyMatch, useOpenMatches, createMatch, cancelMatch } from "@/hooks/usePenaltyMatch";
+import { usePenaltyMatch, useOpenMatches, useMatchTurn, createMatch, cancelMatch } from "@/hooks/usePenaltyMatch";
 import type { EventTemplate, Event as NostrEvent } from "nostr-tools";
 import { signEvent } from "@/lib/identity";
 import { list, subscribe, getPool, getRelays } from "@/lib/pool";
@@ -652,9 +652,10 @@ export function PenaltyMatchView({
 // ─── Tarjetas de partido (usan useProfile para avatar + nombre) ───────────────
 
 function IncomingMatchCard({
-  match, isFinished, onEnterMatch, onChallenge,
+  match, myPubkey, isFinished, onEnterMatch, onChallenge,
 }: {
   match: PenaltyMatchType;
+  myPubkey: string;
   isFinished: boolean;
   onEnterMatch: (m: PenaltyMatchType) => void;
   onChallenge: (pubkey: string) => void;
@@ -663,64 +664,16 @@ function IncomingMatchCard({
   const profile = useProfile(match.challenger);
   const name = profile?.name || (match.challenger.slice(0, 8) + "…");
   const picture = profile?.picture;
+  const myTurn = useMatchTurn(match, myPubkey);
 
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 10,
-      background: isFinished ? "rgba(82,183,136,.04)" : "rgba(232,185,35,.06)",
-      border: `1px solid ${isFinished ? "rgba(82,183,136,.3)" : "rgba(232,185,35,.25)"}`,
+      background: myTurn ? "rgba(82,183,136,.1)" : isFinished ? "rgba(82,183,136,.04)" : "var(--panel)",
+      border: `1px solid ${myTurn ? "rgba(82,183,136,.6)" : isFinished ? "rgba(82,183,136,.3)" : "var(--line)"}`,
       borderRadius: 10, padding: "10px 12px",
-    }}>
-      {picture ? (
-        <img src={picture} alt="" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", border: "1.5px solid var(--gold)", flexShrink: 0 }}
-          onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
-      ) : (
-        <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--panel2)", border: "1.5px solid var(--line)", display: "grid", placeItems: "center", fontSize: 14, color: "var(--muted)", fontWeight: 900, flexShrink: 0, fontFamily: "var(--condensed)" }}>
-          {name[0]?.toUpperCase() || "?"}
-        </div>
-      )}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 13, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {name}
-        </div>
-        <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
-          {match.rounds} {t.pm_rounds_label} · {t.pm_challenges}
-        </div>
-      </div>
-      {isFinished ? (
-        <button
-          onClick={() => onChallenge(match.challenger)}
-          style={{ background: "transparent", color: "var(--gold)", border: "1px solid rgba(232,185,35,.4)", padding: "6px 10px", borderRadius: 7, fontWeight: 900, fontSize: 10, cursor: "pointer", flexShrink: 0, fontFamily: "var(--condensed)" }}
-        >{t.pm_rechallenge}</button>
-      ) : (
-        <button
-          onClick={() => onEnterMatch(match)}
-          style={{ background: "var(--gold)", color: "#030b18", border: "none", padding: "7px 14px", borderRadius: 7, fontWeight: 900, fontSize: 11, cursor: "pointer", flexShrink: 0, fontFamily: "var(--condensed)" }}
-        >{t.pm_play}</button>
-      )}
-    </div>
-  );
-}
-
-function OutgoingMatchCard({
-  match, isFinished, onEnterMatch, onCancel, onChallenge,
-}: {
-  match: PenaltyMatchType;
-  isFinished: boolean;
-  onEnterMatch: (m: PenaltyMatchType) => void;
-  onCancel: (m: PenaltyMatchType) => void;
-  onChallenge: (pubkey: string) => void;
-}) {
-  const { t } = useLang();
-  const profile = useProfile(match.challenged);
-  const name = profile?.name || (match.challenged.slice(0, 8) + "…");
-  const picture = profile?.picture;
-
-  return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 10,
-      background: "var(--panel)", border: "1px solid var(--line)",
-      borderRadius: 10, padding: "10px 12px",
+      boxShadow: myTurn ? "0 0 0 1px rgba(82,183,136,.25)" : "none",
+      transition: "all .2s",
     }}>
       {picture ? (
         <img src={picture} alt="" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", border: "1.5px solid var(--line)", flexShrink: 0 }}
@@ -732,10 +685,72 @@ function OutgoingMatchCard({
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 700, fontSize: 13, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          → {name}
+          {name}
         </div>
-        <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
-          {match.rounds} {t.pm_rounds_label} · {isFinished ? t.pm_finished_short : t.pm_waiting_response}
+        <div style={{ fontSize: 10, marginTop: 2, color: myTurn ? "rgb(82,183,136)" : "var(--muted)", fontWeight: myTurn ? 900 : 400 }}>
+          {myTurn ? "⚡ TU TURNO" : isFinished ? t.pm_finished_short : "esperando…"}
+        </div>
+      </div>
+      {isFinished ? (
+        <button
+          onClick={() => onChallenge(match.challenger)}
+          style={{ background: "transparent", color: "var(--gold)", border: "1px solid rgba(232,185,35,.4)", padding: "6px 10px", borderRadius: 7, fontWeight: 900, fontSize: 10, cursor: "pointer", flexShrink: 0, fontFamily: "var(--condensed)" }}
+        >{t.pm_rechallenge}</button>
+      ) : (
+        <button
+          onClick={() => onEnterMatch(match)}
+          style={{
+            background: myTurn ? "rgb(82,183,136)" : "var(--panel2)",
+            color: myTurn ? "#030b18" : "var(--muted)",
+            border: myTurn ? "none" : "1px solid var(--line)",
+            padding: "7px 14px", borderRadius: 7, fontWeight: 900, fontSize: 11,
+            cursor: "pointer", flexShrink: 0, fontFamily: "var(--condensed)",
+          }}
+        >{myTurn ? t.pm_play : t.pm_view}</button>
+      )}
+    </div>
+  );
+}
+
+function OutgoingMatchCard({
+  match, myPubkey, isFinished, onEnterMatch, onCancel, onChallenge,
+}: {
+  match: PenaltyMatchType;
+  myPubkey: string;
+  isFinished: boolean;
+  onEnterMatch: (m: PenaltyMatchType) => void;
+  onCancel: (m: PenaltyMatchType) => void;
+  onChallenge: (pubkey: string) => void;
+}) {
+  const { t } = useLang();
+  const profile = useProfile(match.challenged);
+  const name = profile?.name || (match.challenged.slice(0, 8) + "…");
+  const picture = profile?.picture;
+  const myTurn = useMatchTurn(match, myPubkey);
+
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 10,
+      background: myTurn ? "rgba(82,183,136,.1)" : "var(--panel)",
+      border: `1px solid ${myTurn ? "rgba(82,183,136,.6)" : isFinished ? "rgba(82,183,136,.3)" : "var(--line)"}`,
+      borderRadius: 10, padding: "10px 12px",
+      boxShadow: myTurn ? "0 0 0 1px rgba(82,183,136,.25)" : "none",
+      transition: "all .2s",
+    }}>
+      {picture ? (
+        <img src={picture} alt="" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", border: "1.5px solid var(--line)", flexShrink: 0 }}
+          onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+      ) : (
+        <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--panel2)", border: "1.5px solid var(--line)", display: "grid", placeItems: "center", fontSize: 14, color: "var(--muted)", fontWeight: 900, flexShrink: 0, fontFamily: "var(--condensed)" }}>
+          {name[0]?.toUpperCase() || "?"}
+        </div>
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {name}
+        </div>
+        <div style={{ fontSize: 10, marginTop: 2, color: myTurn ? "rgb(82,183,136)" : "var(--muted)", fontWeight: myTurn ? 900 : 400 }}>
+          {myTurn ? "⚡ TU TURNO" : isFinished ? t.pm_finished_short : "esperando rival…"}
         </div>
       </div>
       {isFinished ? (
@@ -747,12 +762,20 @@ function OutgoingMatchCard({
         <>
           <button
             onClick={() => onEnterMatch(match)}
-            style={{ background: "var(--panel2)", color: "var(--muted)", border: "1px solid var(--line)", padding: "6px 12px", borderRadius: 7, fontWeight: 900, fontSize: 11, cursor: "pointer", flexShrink: 0, fontFamily: "var(--condensed)" }}
-          >{t.pm_view}</button>
-          <button
-            onClick={() => onCancel(match)}
-            style={{ background: "transparent", color: "rgba(255,100,100,.8)", border: "1px solid rgba(255,100,100,.3)", padding: "6px 10px", borderRadius: 7, fontWeight: 900, fontSize: 10, cursor: "pointer", flexShrink: 0, fontFamily: "var(--condensed)" }}
-          >✕</button>
+            style={{
+              background: myTurn ? "rgb(82,183,136)" : "var(--panel2)",
+              color: myTurn ? "#030b18" : "var(--muted)",
+              border: myTurn ? "none" : "1px solid var(--line)",
+              padding: "6px 12px", borderRadius: 7, fontWeight: 900, fontSize: 11,
+              cursor: "pointer", flexShrink: 0, fontFamily: "var(--condensed)",
+            }}
+          >{myTurn ? t.pm_play : t.pm_view}</button>
+          {!myTurn && (
+            <button
+              onClick={() => onCancel(match)}
+              style={{ background: "transparent", color: "rgba(255,100,100,.8)", border: "1px solid rgba(255,100,100,.3)", padding: "6px 10px", borderRadius: 7, fontWeight: 900, fontSize: 10, cursor: "pointer", flexShrink: 0, fontFamily: "var(--condensed)" }}
+            >✕</button>
+          )}
         </>
       )}
     </div>
@@ -1130,12 +1153,12 @@ export function PenaltyMatchLobby({
         const renderCard = ({ m, isIncoming }: { m: PenaltyMatchType; isIncoming: boolean }) =>
           isIncoming ? (
             <IncomingMatchCard
-              key={m.id} match={m} isFinished={finishedIds.includes(m.id)}
+              key={m.id} match={m} myPubkey={myPubkey ?? ""} isFinished={finishedIds.includes(m.id)}
               onEnterMatch={onEnterMatch} onChallenge={startChallenge}
             />
           ) : (
             <OutgoingMatchCard
-              key={m.id} match={m} isFinished={finishedIds.includes(m.id)}
+              key={m.id} match={m} myPubkey={myPubkey ?? ""} isFinished={finishedIds.includes(m.id)}
               onEnterMatch={onEnterMatch} onCancel={handleCancel} onChallenge={startChallenge}
             />
           );
