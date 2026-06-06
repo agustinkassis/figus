@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { CATALOG, RARITY_META, TEAMS, TEAM_FLAGS } from "@/lib/catalog";
 import { StickerFace } from "./StickerCard";
 import { useLang } from "@/contexts/LangContext";
+import { ShareButton } from "./ShareButton";
+import type { Identity } from "@/lib/identity";
+import { SITE_URL } from "@/lib/share";
 
 export function Packs({
   onOpen,
@@ -305,9 +308,11 @@ export function Packs({
 export function PackReveal({
   figus,
   onClose,
+  identity,
 }: {
   figus: number[];
   onClose: () => void;
+  identity?: Identity;
 }) {
   const { t } = useLang();
   const [revealed, setRevealed] = useState(0);
@@ -417,10 +422,28 @@ export function PackReveal({
           })}
         </div>
 
+        {(() => {
+          const allRevealed = revealed >= figus.length;
+          const specials = figus.filter(n => {
+            const r = CATALOG[n]?.rarity;
+            return r === "legendary" || r === "shiny";
+          });
+          if (!allRevealed || !identity || specials.length === 0) return null;
+          const best = specials.find(n => CATALOG[n].rarity === "legendary") ?? specials[0];
+          const s = CATALOG[best];
+          const rarityLabel = RARITY_META[s.rarity].label.toUpperCase();
+          const content = `🎴 ¡Acabo de sacar una ${rarityLabel} en el álbum del Mundial 2026!\n✨ #${best} ${s.name}\n\nArmá tu álbum en ${SITE_URL} ⚽🏆 #FIFAWorldCup2026 #Figus`;
+          return (
+            <div style={{ marginTop: 16 }}>
+              <ShareButton content={content} identity={identity} style={{ width: "100%" }} />
+            </div>
+          );
+        })()}
+
         <button
           onClick={onClose}
           style={{
-            marginTop: 24,
+            marginTop: 12,
             background: "linear-gradient(135deg,var(--gold),#d4920a)",
             color: "#030b18",
             border: 0,

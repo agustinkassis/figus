@@ -16,6 +16,8 @@ import { KIND, ISSUER_PUBKEY } from "@/lib/constants";
 import { CATALOG, RARITY_META, TEAMS, teamName } from "@/lib/catalog";
 import { StickerFace } from "@/components/StickerCard";
 import { useLang } from "@/contexts/LangContext";
+import { ShareButton } from "@/components/ShareButton";
+import { SITE_URL } from "@/lib/share";
 
 const PenaltyScene3D = dynamic(() => import("@/components/PenaltyScene3D"), {
   ssr: false,
@@ -241,6 +243,7 @@ export function PenaltyMatchView({
   onBack: () => void;
 }) {
   const myPubkey = identity.pubkey;
+  const isChallenger = myPubkey === match.challenger;
   const { t } = useLang();
   const { state, publishing, publishCommit, publishBlock, publishReveal } = usePenaltyMatch(match, identity);
 
@@ -581,7 +584,23 @@ export function PenaltyMatchView({
                 </div>
               )}
               {stealPhase === "done" && stolenNum !== null && (
-                <StolenStickerCard num={stolenNum} won />
+                <div>
+                  <StolenStickerCard num={stolenNum} won />
+                  {(() => {
+                    const s = CATALOG[stolenNum];
+                    const opponentPubkey = isChallenger ? match.challenged : match.challenger;
+                    const opponentNpub = nip19.npubEncode(opponentPubkey);
+                    const content = `⚽ ¡Le robé la #${stolenNum} ${s.name} a nostr:${opponentNpub} ganando una tanda de penales en el álbum del Mundial 2026!\n\nJugá en ${SITE_URL} 🎴 #FIFAWorldCup2026 #Figus`;
+                    return (
+                      <ShareButton
+                        content={content}
+                        identity={identity}
+                        tags={[["p", opponentPubkey]]}
+                        style={{ marginTop: 8, width: "100%" }}
+                      />
+                    );
+                  })()}
+                </div>
               )}
               {stealPhase === "error" && (
                 <div>
@@ -760,6 +779,9 @@ export function PenaltyMatchLobby({
   const [resolvedProfile, setResolvedProfile] = useState<{
     pubkey: string; npub: string; name?: string; picture?: string;
   } | null>(null);
+  const [justCreated, setJustCreated] = useState<{
+    pubkey: string; npub: string; name?: string;
+  } | null>(null);
   const [suggestions, setSuggestions] = useState<Array<{
     pubkey: string; npub: string; name?: string; picture?: string; nip05?: string;
   }>>([]);
@@ -880,10 +902,12 @@ export function PenaltyMatchLobby({
     setError(null);
     setPublishing(true);
     try {
-      await createMatch(identity, resolvedProfile.pubkey, 3);
+      const profile = resolvedProfile;
+      await createMatch(identity, profile.pubkey, 3);
       setInputPk("");
       setResolvedProfile(null);
       setChallenging(false);
+      setJustCreated(profile);
     } catch {
       setError(t.pm_challenge_error);
     } finally {
@@ -930,6 +954,39 @@ export function PenaltyMatchLobby({
           {t.pm_challenge_btn}
         </button>
       </div>
+
+      {/* Desafío recién enviado — share panel */}
+      {justCreated && identity && (
+        <div style={{
+          background: "rgba(139,92,246,.08)",
+          border: "1px solid rgba(139,92,246,.3)",
+          borderRadius: 12, padding: "12px 14px",
+          marginBottom: 14, display: "flex", flexDirection: "column", gap: 8,
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 900, color: "rgb(167,139,250)" }}>
+            {t.share_challenge_sent}
+          </div>
+          <div style={{ fontSize: 10, color: "var(--muted)" }}>
+            {t.share_challenge_hint}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <ShareButton
+              content={`⚽ ${justCreated.name ? `¡Desafié a ${justCreated.name}` : "¡Desafié a alguien"} a una tanda de penales en el álbum del Mundial 2026!\n\nAceptá el desafío en ${SITE_URL} 🎴 #FIFAWorldCup2026 #Figus`}
+              identity={identity}
+              tags={[["p", justCreated.pubkey]]}
+              style={{ flex: 1 }}
+            />
+            <button
+              onClick={() => setJustCreated(null)}
+              style={{
+                background: "transparent", border: "1px solid var(--line)",
+                color: "var(--muted)", padding: "8px 10px", borderRadius: 8,
+                fontSize: 10, cursor: "pointer", fontFamily: "var(--condensed)",
+              }}
+            >✕</button>
+          </div>
+        </div>
+      )}
 
       {/* Form de desafío */}
       {challenging && (

@@ -237,6 +237,14 @@ const T = {
     tournament_desc:  "Competí contra otros coleccionistas en un torneo eliminatorio de penales.",
     tournament_soon:  "PRÓXIMAMENTE",
 
+    // Compartir en Nostr
+    share_btn:     "🟣 COMPARTIR EN NOSTR",
+    share_sending: "Publicando...",
+    share_sent:    "✓ PUBLICADO",
+    share_error:   "⚠ ERROR — REINTENTAR",
+    share_challenge_sent: "¡Desafío enviado!",
+    share_challenge_hint: "Compartilo para que tu rival lo vea directamente en Nostr",
+
     // Sticker zoom (extended)
     zoom_price_label: "PRECIO (sats)",
     zoom_publish: "⚡ PUBLICAR",
@@ -547,6 +555,14 @@ const T = {
     tournament_title: "Penalty Tournament",
     tournament_desc:  "Compete against other collectors in an elimination penalty shootout tournament.",
     tournament_soon:  "COMING SOON",
+
+    // Share on Nostr
+    share_btn:     "🟣 SHARE ON NOSTR",
+    share_sending: "Publishing...",
+    share_sent:    "✓ PUBLISHED",
+    share_error:   "⚠ ERROR — RETRY",
+    share_challenge_sent: "Challenge sent!",
+    share_challenge_hint: "Share it so your rival sees it directly on Nostr",
 
     // Sticker zoom (extended)
     zoom_price_label: "PRICE (sats)",

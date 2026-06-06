@@ -687,6 +687,7 @@ function HomeInner() {
                 onSell={listForSale}
                 claimedPages={claimedPages}
                 myListings={listings.filter(l => l.seller === pubkey)}
+                identity={identity ?? undefined}
               />
             )}
             {tab === "packs" && (
@@ -807,7 +808,7 @@ function HomeInner() {
       )}
 
       {packResult && (
-        <PackReveal figus={packResult} onClose={() => setPackResult(null)} />
+        <PackReveal figus={packResult} onClose={() => setPackResult(null)} identity={identity ?? undefined} />
       )}
 
       {invoice && (

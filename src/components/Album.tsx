@@ -5,6 +5,9 @@ import {
   CATALOG, PAGES, RARITY_META, TEAMS, TEAM_FLAGS, TEAM_GROUPS, ALL_NUMBERS, suggestedPrice, teamName,
 } from "@/lib/catalog";
 import type { Listing, Ownership, Page } from "@/lib/types";
+import { ShareButton } from "./ShareButton";
+import type { Identity } from "@/lib/identity";
+import { SITE_URL } from "@/lib/share";
 import { StickerFace } from "./StickerCard";
 import { StickerZoom } from "./StickerZoom";
 import { Flag } from "./Flag";
@@ -30,6 +33,7 @@ export function Album({
   onSell,
   claimedPages = [],
   myListings = [],
+  identity,
 }: {
   ownership: Ownership;
   onClaim: (page: Page) => void;
@@ -37,6 +41,7 @@ export function Album({
   onSell: (num: number, price: number) => void;
   claimedPages?: string[];
   myListings?: Listing[];
+  identity?: Identity;
 }) {
   const listedNums = new Set(myListings.map(l => l.stickerNum));
   const [idx,         setIdx]         = useState(0);
@@ -253,6 +258,7 @@ export function Album({
             <AlbumCover
               ownership={ownership} total={total} owned={owned} onZoom={setZoomedNum}
               albumComplete={albumComplete} albumClaimed={albumClaimed} onClaimAlbum={onClaimAlbum}
+              identity={identity}
             />
           ) : (
             /* ── Páginas de equipo ──────────────────────────────── */
@@ -306,24 +312,36 @@ export function Album({
 
                 {complete && (() => {
                   const claimed = claimedPages.includes(page.id);
+                  const teamLabel = lang === "en"
+                    ? (page.id !== "fwc" ? page.id.toUpperCase() : "World Cup")
+                    : (page.name ?? page.id);
+                  const shareContent = `🏆 ¡Completé el equipo de ${teamLabel} en el álbum del Mundial 2026!\n\nArmá tu álbum en ${SITE_URL} ⚽🎴 #FIFAWorldCup2026 #Figus`;
                   return (
-                    <button
-                      onClick={() => !claimed && onClaim(page)}
-                      className="pop-in"
-                      style={{
-                        background: claimed
-                          ? "rgba(255,255,255,0.15)"
-                          : "linear-gradient(135deg,var(--gold),#d4920a)",
-                        color: claimed ? "rgba(255,255,255,0.6)" : "#030b18",
-                        border: claimed ? "1px solid rgba(255,255,255,0.2)" : 0,
-                        padding: "8px 14px", borderRadius: 8,
-                        fontWeight: 900, fontSize: 12, fontFamily: "var(--condensed)",
-                        flexShrink: 0, letterSpacing: 0.3,
-                        cursor: claimed ? "default" : "pointer",
-                      }}
-                    >
-                      {claimed ? t.album_claimed : t.album_prize}
-                    </button>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }} className="pop-in">
+                      <button
+                        onClick={() => !claimed && onClaim(page)}
+                        style={{
+                          background: claimed
+                            ? "rgba(255,255,255,0.15)"
+                            : "linear-gradient(135deg,var(--gold),#d4920a)",
+                          color: claimed ? "rgba(255,255,255,0.6)" : "#030b18",
+                          border: claimed ? "1px solid rgba(255,255,255,0.2)" : 0,
+                          padding: "8px 14px", borderRadius: 8,
+                          fontWeight: 900, fontSize: 12, fontFamily: "var(--condensed)",
+                          flexShrink: 0, letterSpacing: 0.3,
+                          cursor: claimed ? "default" : "pointer",
+                        }}
+                      >
+                        {claimed ? t.album_claimed : t.album_prize}
+                      </button>
+                      {identity && (
+                        <ShareButton
+                          content={shareContent}
+                          identity={identity}
+                          style={{ padding: "8px 10px", fontSize: 10 }}
+                        />
+                      )}
+                    </div>
                   );
                 })()}
               </div>
@@ -523,10 +541,11 @@ export function Album({
 // ─── Portada del álbum (página 0) ─────────────────────────────────────────────
 function AlbumCover({
   ownership, total, owned, onZoom,
-  albumComplete, albumClaimed, onClaimAlbum,
+  albumComplete, albumClaimed, onClaimAlbum, identity,
 }: {
   ownership: Ownership; total: number; owned: number; onZoom: (n: number) => void;
   albumComplete: boolean; albumClaimed: boolean; onClaimAlbum: () => void;
+  identity?: Identity;
 }) {
   const { t } = useLang();
   const pct = Math.round((owned / total) * 100);
@@ -691,23 +710,30 @@ function AlbumCover({
             {t.album_complete} · {pct}% {t.album_pct_complete}
           </div>
           {albumComplete && (
-            <button
-              onClick={() => !albumClaimed && onClaimAlbum()}
-              className="pop-in"
-              style={{
-                marginTop: 12,
-                background: albumClaimed
-                  ? "rgba(255,255,255,0.12)"
-                  : "linear-gradient(135deg,var(--gold),#d4920a)",
-                color: albumClaimed ? "rgba(255,255,255,0.5)" : "#030b18",
-                border: albumClaimed ? "1px solid rgba(255,255,255,0.2)" : "none",
-                padding: "10px 24px", borderRadius: 10,
-                fontWeight: 900, fontSize: 13, fontFamily: "var(--condensed)",
-                letterSpacing: 0.5, cursor: albumClaimed ? "default" : "pointer",
-              }}
-            >
-              {albumClaimed ? t.album_complete_claimed : t.album_complete_btn}
-            </button>
+            <div className="pop-in" style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+              <button
+                onClick={() => !albumClaimed && onClaimAlbum()}
+                style={{
+                  background: albumClaimed
+                    ? "rgba(255,255,255,0.12)"
+                    : "linear-gradient(135deg,var(--gold),#d4920a)",
+                  color: albumClaimed ? "rgba(255,255,255,0.5)" : "#030b18",
+                  border: albumClaimed ? "1px solid rgba(255,255,255,0.2)" : "none",
+                  padding: "10px 24px", borderRadius: 10,
+                  fontWeight: 900, fontSize: 13, fontFamily: "var(--condensed)",
+                  letterSpacing: 0.5, cursor: albumClaimed ? "default" : "pointer",
+                }}
+              >
+                {albumClaimed ? t.album_complete_claimed : t.album_complete_btn}
+              </button>
+              {identity && (
+                <ShareButton
+                  content={`🏆 ¡Completé el álbum del Mundial 2026! ¡Todas las figuritas coleccionadas! 🎴⚽\n\nArmá el tuyo en ${SITE_URL} #FIFAWorldCup2026 #Figus`}
+                  identity={identity}
+                  style={{ width: "100%" }}
+                />
+              )}
+            </div>
           )}
         </div>
 
