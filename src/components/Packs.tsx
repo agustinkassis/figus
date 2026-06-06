@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CATALOG, RARITY_META, TEAMS, TEAM_FLAGS } from "@/lib/catalog";
 import { StickerFace } from "./StickerCard";
 import { useLang } from "@/contexts/LangContext";
@@ -316,6 +316,7 @@ export function PackReveal({
 }) {
   const { t } = useLang();
   const [revealed, setRevealed] = useState(0);
+  const cardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const interval = setInterval(
       () => setRevealed((r) => (r < figus.length ? r + 1 : r)),
@@ -384,42 +385,50 @@ export function PackReveal({
             flexWrap: "wrap",
           }}
         >
-          {figus.map((num, i) => {
-            const f = CATALOG[num];
-            const r = RARITY_META[f.rarity];
-            const team = TEAMS[f.team];
-            const show = i < revealed;
-
-            return (
-              <div
-                key={`${num}-${i}`}
-                className={show ? "card-flip" : ""}
-                style={{
-                  width: 100,
-                  height: 134,
-                  borderRadius: 10,
-                  border: `2px solid ${show ? r.ring : "var(--line)"}`,
-                  overflow: "hidden",
-                  position: "relative",
-                  boxShadow: show ? `0 0 28px ${r.glow}` : "none",
-                  background: show
-                    ? `linear-gradient(150deg, ${team.color}, ${team.accent})`
-                    : "var(--panel2)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {show ? (
-                  <div style={{ width: "100%", height: "100%" }}>
-                    <StickerFace num={num} />
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 36, opacity: 0.3 }}>❔</div>
-                )}
-              </div>
-            );
-          })}
+          {(() => {
+            // Index of the best special card (legendary > shiny) — used to attach the share ref
+            const bestIdx = (() => {
+              const li = figus.findIndex(n => CATALOG[n]?.rarity === "legendary");
+              if (li >= 0) return li;
+              return figus.findIndex(n => CATALOG[n]?.rarity === "shiny");
+            })();
+            return figus.map((num, i) => {
+              const f = CATALOG[num];
+              const r = RARITY_META[f.rarity];
+              const team = TEAMS[f.team];
+              const show = i < revealed;
+              return (
+                <div
+                  key={`${num}-${i}`}
+                  ref={i === bestIdx ? cardRef : undefined}
+                  className={show ? "card-flip" : ""}
+                  style={{
+                    width: 100,
+                    height: 134,
+                    borderRadius: 10,
+                    border: `2px solid ${show ? r.ring : "var(--line)"}`,
+                    overflow: "hidden",
+                    position: "relative",
+                    boxShadow: show ? `0 0 28px ${r.glow}` : "none",
+                    background: show
+                      ? `linear-gradient(150deg, ${team.color}, ${team.accent})`
+                      : "var(--panel2)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {show ? (
+                    <div style={{ width: "100%", height: "100%" }}>
+                      <StickerFace num={num} />
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 36, opacity: 0.3 }}>❔</div>
+                  )}
+                </div>
+              );
+            });
+          })()}
         </div>
 
         {(() => {
@@ -435,7 +444,7 @@ export function PackReveal({
           const content = `🎴 ¡Acabo de sacar una ${rarityLabel} en el álbum del Mundial 2026!\n✨ #${best} ${s.name}\n\nArmá tu álbum en ${SITE_URL} ⚽🏆 #FIFAWorldCup2026 #Figus`;
           return (
             <div style={{ marginTop: 16 }}>
-              <ShareButton content={content} identity={identity} style={{ width: "100%" }} />
+              <ShareButton content={content} identity={identity} style={{ width: "100%" }} cardRef={cardRef} />
             </div>
           );
         })()}
