@@ -63,12 +63,25 @@ function HomeInner() {
   // Listing IDs paid locally — hidden from market immediately, before SETTLEMENT arrives.
   const [locallyRemovedListings, setLocallyRemovedListings] = useState<string[]>([]);
   const [showSettings, setShowSettings] = useState(false);
+  const [keyAcked, setKeyAcked] = useState(false);
   const [activeMatch, setActiveMatch] = useState<PenaltyMatch | null>(null);
   const [claimedPages, setClaimedPages] = useState<string[]>([]);
 
   useEffect(() => {
     if (packResult) setPenaltyPackPending(false);
   }, [packResult]);
+
+  // Mostrar aviso de clave a usuarios locales que no lo confirmaron aún
+  useEffect(() => {
+    if (!pubkey || identity?.mode !== "local") { setKeyAcked(true); return; }
+    const acked = localStorage.getItem("figus:key_ack");
+    setKeyAcked(acked === pubkey);
+  }, [pubkey, identity?.mode]);
+
+  function ackKey() {
+    if (pubkey) localStorage.setItem("figus:key_ack", pubkey);
+    setKeyAcked(true);
+  }
 
   // Load which pages have already been claimed (persisted locally to drive button state)
   useEffect(() => {
@@ -676,6 +689,59 @@ function HomeInner() {
           </div>
 
           <main style={{ maxWidth: 720, margin: "0 auto", padding: "18px 20px" }}>
+            {/* ── Aviso clave privada (solo usuarios locales que no confirmaron) ── */}
+            {!keyAcked && identity?.mode === "local" && (
+              <div style={{
+                background: "linear-gradient(135deg, rgba(245,158,11,.15), rgba(239,68,68,.1))",
+                border: "1px solid rgba(245,158,11,.5)",
+                borderRadius: 12,
+                padding: "14px 16px",
+                marginBottom: 18,
+                display: "flex",
+                gap: 12,
+                alignItems: "flex-start",
+              }}>
+                <div style={{ fontSize: 22, lineHeight: 1, flexShrink: 0 }}>⚠️</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{
+                    fontFamily: "var(--condensed)", fontWeight: 900,
+                    fontSize: 13, color: "#f59e0b", letterSpacing: 0.3, marginBottom: 5,
+                  }}>
+                    {t.key_warning_title}
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5, marginBottom: 10 }}>
+                    {t.key_warning_body}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      onClick={() => { setShowSettings(true); ackKey(); }}
+                      style={{
+                        background: "#f59e0b", color: "#030b18",
+                        border: "none", padding: "7px 14px", borderRadius: 7,
+                        fontWeight: 900, fontSize: 11, fontFamily: "var(--condensed)",
+                        letterSpacing: 0.5, cursor: "pointer",
+                      }}
+                    >
+                      {t.key_warning_open_settings}
+                    </button>
+                    <button
+                      onClick={ackKey}
+                      style={{
+                        background: "transparent",
+                        border: "1px solid rgba(245,158,11,.4)",
+                        color: "rgba(245,158,11,.8)",
+                        padding: "7px 14px", borderRadius: 7,
+                        fontWeight: 900, fontSize: 11, fontFamily: "var(--condensed)",
+                        letterSpacing: 0.5, cursor: "pointer",
+                      }}
+                    >
+                      {t.key_warning_ack}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {loading && configured && (
               <p style={{ opacity: 0.5, textAlign: "center" }}>{t.loading}</p>
             )}

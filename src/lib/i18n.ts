@@ -245,6 +245,12 @@ const T = {
     share_challenge_sent: "¡Desafío enviado!",
     share_challenge_hint: "Compartilo para que tu rival lo vea directamente en Nostr",
 
+    // Aviso clave privada
+    key_warning_title:         "¡GUARDÁ TU CLAVE PRIVADA!",
+    key_warning_body:          "Tu cuenta Nostr se generó automáticamente y está guardada solo en este dispositivo. Si lo perdés o borrás la app, perdés el acceso para siempre. Copiá tu clave privada (nsec) desde ⚙️ Configuración.",
+    key_warning_open_settings: "⚙️ IR A CONFIGURACIÓN",
+    key_warning_ack:           "Ya la guardé",
+
     // Sticker zoom (extended)
     zoom_price_label: "PRECIO (sats)",
     zoom_publish: "⚡ PUBLICAR",
@@ -563,6 +569,12 @@ const T = {
     share_error:   "⚠ ERROR — RETRY",
     share_challenge_sent: "Challenge sent!",
     share_challenge_hint: "Share it so your rival sees it directly on Nostr",
+
+    // Private key warning
+    key_warning_title:         "SAVE YOUR PRIVATE KEY!",
+    key_warning_body:          "Your Nostr account was automatically generated and is stored only on this device. If you lose it or clear the app, you lose access forever. Copy your private key (nsec) from ⚙️ Settings.",
+    key_warning_open_settings: "⚙️ GO TO SETTINGS",
+    key_warning_ack:           "Already saved it",
 
     // Sticker zoom (extended)
     zoom_price_label: "PRICE (sats)",
