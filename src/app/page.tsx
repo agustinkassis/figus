@@ -48,7 +48,18 @@ function HomeInner() {
   const { incoming: pendingChallenges } = useOpenMatches(pubkey);
   const hasPendingChallenge = pendingChallenges.length > 0;
 
-  const [tab, setTab] = useState<Tab>("album");
+  const VALID_TABS: Tab[] = ["album", "packs", "market", "fixture", "game"];
+  const hashTab = (): Tab => {
+    if (typeof window === "undefined") return "album";
+    const h = window.location.hash.slice(1) as Tab;
+    return VALID_TABS.includes(h) ? h : "album";
+  };
+  const [tab, setTab] = useState<Tab>(hashTab);
+
+  // Keep URL hash in sync with active tab
+  useEffect(() => {
+    window.location.hash = tab;
+  }, [tab]);
   const [toast, setToast] = useState<string | null>(null);
   const [packResult, setPackResult] = useState<number[] | null>(null);
   const [penaltyPackPending, setPenaltyPackPending] = useState(false);
