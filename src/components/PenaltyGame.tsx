@@ -1,7 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState, useEffect } from "react";
+import { Component, useState, useEffect } from "react";
+import type { ReactNode } from "react";
 import { ARROWS, resolveKick, todayKey } from "@/lib/penalty";
 import { useLang } from "@/contexts/LangContext";
 
@@ -11,6 +12,37 @@ const PenaltyScene3D = dynamic(() => import("@/components/PenaltyScene3D"), {
     <div style={{ height: 320, background: "#0d1a0d", borderRadius: 14 }} />
   ),
 });
+
+// Catches WebGL / canvas errors (e.g. LibreWolf privacy.resistFingerprinting)
+class Scene3DErrorBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  { crashed: boolean }
+> {
+  state = { crashed: false };
+  static getDerivedStateFromError() { return { crashed: true }; }
+  componentDidCatch() {}
+  render() {
+    return this.state.crashed ? this.props.fallback : this.props.children;
+  }
+}
+
+function Scene2DFallback({ phase, isGoal }: { phase: string; isGoal: boolean }) {
+  return (
+    <div style={{
+      height: 320, background: "linear-gradient(170deg,#0a1a0a,#0d2e0d)",
+      borderRadius: 14, display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", gap: 12,
+      fontFamily: "var(--condensed)",
+    }}>
+      <div style={{ fontSize: 64 }}>
+        {phase === "result" ? (isGoal ? "⚽" : "🧤") : "⚽"}
+      </div>
+      <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", letterSpacing: 1 }}>
+        WebGL no disponible en este navegador
+      </div>
+    </div>
+  );
+}
 
 type Phase = "aim" | "flying" | "result";
 
@@ -107,7 +139,9 @@ export function PenaltyGame({
 
       {/* 3D scene */}
       <div style={{ borderRadius: 14, overflow: "hidden", boxShadow: "0 8px 28px rgba(0,0,0,.55)" }}>
-        <PenaltyScene3D phase={phase} zone={zone} keeperCol={keeperCol} isGoal={isGoal} />
+        <Scene3DErrorBoundary fallback={<Scene2DFallback phase={phase} isGoal={isGoal} />}>
+          <PenaltyScene3D phase={phase} zone={zone} keeperCol={keeperCol} isGoal={isGoal} />
+        </Scene3DErrorBoundary>
       </div>
 
       {/* Controls */}
