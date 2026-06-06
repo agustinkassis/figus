@@ -18,6 +18,7 @@ import { StickerFace } from "@/components/StickerCard";
 import { useLang } from "@/contexts/LangContext";
 import { ShareButton } from "@/components/ShareButton";
 import { SITE_URL } from "@/lib/share";
+import { Scene3DErrorBoundary, Scene2DFallback } from "@/components/Scene3DErrorBoundary";
 
 const PenaltyScene3D = dynamic(() => import("@/components/PenaltyScene3D"), {
   ssr: false,
@@ -453,12 +454,14 @@ export function PenaltyMatchView({
 
       {/* 3D Scene */}
       <div style={{ borderRadius: 14, overflow: "hidden", boxShadow: "0 8px 28px rgba(0,0,0,.55)", marginBottom: 10 }}>
-        <PenaltyScene3D
-          phase={scenePhase}
-          zone={sceneZone}
-          keeperCol={sceneKeeperCol}
-          isGoal={sceneIsGoal}
-        />
+        <Scene3DErrorBoundary fallback={<Scene2DFallback phase={scenePhase} isGoal={sceneIsGoal} />}>
+          <PenaltyScene3D
+            phase={scenePhase}
+            zone={sceneZone}
+            keeperCol={sceneKeeperCol}
+            isGoal={sceneIsGoal}
+          />
+        </Scene3DErrorBoundary>
       </div>
 
       {/* Marcador */}
