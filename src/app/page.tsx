@@ -771,7 +771,7 @@ function HomeInner() {
                 <MyStickers ownership={ownership} onSell={listForSale} myListings={listings.filter(l => l.seller === pubkey)} />
               </>
             )}
-            {tab === "fixture" && <Fixture />}
+            {tab === "fixture" && <Fixture identity={identity ?? undefined} />}
             {tab === "game" && (
               <div style={{ display: "grid", gap: 28 }}>
                 {activeMatch && identity ? (

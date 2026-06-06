@@ -142,6 +142,14 @@ const T = {
     matchday_2: "Jornada 2",
     matchday_3: "Jornada 3",
 
+    // Pronósticos
+    prono_save:        "GUARDAR PRONÓSTICO",
+    prono_saving:      "GUARDANDO…",
+    prono_saved:       "GUARDADO",
+    prono_connect:     "Conectate para pronosticar",
+    prono_count:       "pronósticos",
+    prono_simultaneous: "partidos simultáneos",
+
     // Rarity
     rarity_common:    "Común",
     rarity_rare:      "Rara",
@@ -466,6 +474,14 @@ const T = {
     matchday_1: "Matchday 1",
     matchday_2: "Matchday 2",
     matchday_3: "Matchday 3",
+
+    // Predictions
+    prono_save:        "SAVE PREDICTION",
+    prono_saving:      "SAVING…",
+    prono_saved:       "SAVED",
+    prono_connect:     "Connect to predict",
+    prono_count:       "predictions",
+    prono_simultaneous: "simultaneous matches",
 
     // Rarity
     rarity_common:    "Common",
