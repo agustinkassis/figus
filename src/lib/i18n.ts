@@ -232,6 +232,10 @@ const T = {
     pm_rechallenge: "↺ REVANCHA",
     pm_sudden_death: "⚡ MUERTE SÚBITA",
 
+    tournament_title: "Torneo de Penales",
+    tournament_desc:  "Competí contra otros coleccionistas en un torneo eliminatorio de penales.",
+    tournament_soon:  "PRÓXIMAMENTE",
+
     // Sticker zoom (extended)
     zoom_price_label: "PRECIO (sats)",
     zoom_publish: "⚡ PUBLICAR",
@@ -537,6 +541,10 @@ const T = {
     pm_view: "VIEW",
     pm_rechallenge: "↺ REMATCH",
     pm_sudden_death: "⚡ SUDDEN DEATH",
+
+    tournament_title: "Penalty Tournament",
+    tournament_desc:  "Compete against other collectors in an elimination penalty shootout tournament.",
+    tournament_soon:  "COMING SOON",
 
     // Sticker zoom (extended)
     zoom_price_label: "PRICE (sats)",
