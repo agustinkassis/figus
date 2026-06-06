@@ -6,6 +6,7 @@ import { KIND } from "@/lib/constants";
 import { list, subscribe, getPool, getRelays } from "@/lib/pool";
 import { signEvent } from "@/lib/identity";
 import type { Identity } from "@/lib/identity";
+import { sendDM, dmNewChallenge, dmYourTurn } from "@/lib/dm";
 import {
   parseMatch, parseCommit, parseBlock, parseReveal,
   deriveMatchState, generateNonce, commitZone,
@@ -229,6 +230,12 @@ export function usePenaltyMatch(
       await Promise.any(getPool().publish(getRelays(), ev));
       pendingCommitRef.current = null;
       try { localStorage.removeItem(`figus_pcommit_${match.d}`); } catch {}
+
+      // After reveal it's the opponent's turn to kick — notify them (best-effort)
+      const opponentPubkey = identity.pubkey === match.challenger
+        ? match.challenged
+        : match.challenger;
+      sendDM(identity, opponentPubkey, dmYourTurn()).catch(() => {});
     } finally {
       setPublishing(false);
     }
@@ -260,6 +267,10 @@ export async function createMatch(
   };
   const ev = await signEvent(tmpl, identity.mode);
   await Promise.any(getPool().publish(getRelays(), ev));
+
+  // Notify the challenged player via NIP-04 DM (best-effort)
+  sendDM(identity, challenged, dmNewChallenge(identity.pubkey)).catch(() => {});
+
   return d;
 }
 

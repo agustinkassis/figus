@@ -13,6 +13,10 @@ declare global {
     nostr?: {
       getPublicKey(): Promise<string>;
       signEvent(event: EventTemplate): Promise<Event>;
+      nip04?: {
+        encrypt(pubkey: string, plaintext: string): Promise<string>;
+        decrypt(pubkey: string, ciphertext: string): Promise<string>;
+      };
     };
   }
 }
@@ -242,6 +246,25 @@ function getLocalSk(): Uint8Array {
   const hex = localStorage.getItem(LS_SK);
   if (!hex) throw new Error("No hay clave local");
   return Uint8Array.from(Buffer.from(hex, "hex"));
+}
+
+export async function encryptDM(
+  recipientPubkey: string,
+  plaintext: string,
+  mode: SignerMode
+): Promise<string> {
+  if (mode === "nip07") {
+    if (!window.nostr?.nip04) throw new Error("NIP-04 no soportado por la extensión");
+    return window.nostr.nip04.encrypt(recipientPubkey, plaintext);
+  }
+  if (mode === "nip46") {
+    const signer = _nip46 as unknown as { nip04?: { encrypt(p: string, m: string): Promise<string> } } | null;
+    if (!signer?.nip04?.encrypt) throw new Error("El bunker no soporta NIP-04");
+    return signer.nip04.encrypt(recipientPubkey, plaintext);
+  }
+  // local
+  const { nip04 } = await import("nostr-tools");
+  return nip04.encrypt(getLocalSk(), recipientPubkey, plaintext);
 }
 
 export async function signEvent(
