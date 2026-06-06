@@ -226,6 +226,8 @@ const T = {
     pm_waiting_response: "esperando respuesta",
     pm_play: "JUGAR",
     pm_view: "VER",
+    pm_rechallenge: "↺ REVANCHA",
+    pm_sudden_death: "⚡ MUERTE SÚBITA",
 
     // Sticker zoom (extended)
     zoom_price_label: "PRECIO (sats)",
@@ -527,6 +529,8 @@ const T = {
     pm_waiting_response: "waiting for response",
     pm_play: "PLAY",
     pm_view: "VIEW",
+    pm_rechallenge: "↺ REMATCH",
+    pm_sudden_death: "⚡ SUDDEN DEATH",
 
     // Sticker zoom (extended)
     zoom_price_label: "PRICE (sats)",

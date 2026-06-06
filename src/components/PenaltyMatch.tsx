@@ -116,7 +116,7 @@ function Scoreboard({
   state: MatchState;
   myPubkey: string;
 }) {
-  const { match, score, rounds, currentRound } = state;
+  const { match, score, rounds, currentRound, suddenDeath } = state;
   const { t } = useLang();
   const isChallenger = myPubkey === match.challenger;
   const challengerProfile = useProfile(match.challenger);
@@ -155,20 +155,28 @@ function Scoreboard({
       <PlayerSide picture={challengerProfile?.picture} name={challengerName} score={score.challenger} isMe={isChallenger} />
 
       <div style={{ textAlign: "center", flexShrink: 0 }}>
-        <div style={{ fontSize: 10, color: "rgba(255,255,255,.4)", fontFamily: "var(--condensed)", letterSpacing: 1 }}>
-          {t.pm_round} {Math.min(currentRound, match.rounds)}/{match.rounds}
+        {suddenDeath ? (
+          <div style={{ fontSize: 9, color: "#f59e0b", fontFamily: "var(--condensed)", fontWeight: 900, letterSpacing: 0.5, marginBottom: 2 }}>
+            {t.pm_sudden_death}
+          </div>
+        ) : (
+          <div style={{ fontSize: 10, color: "rgba(255,255,255,.4)", fontFamily: "var(--condensed)", letterSpacing: 1 }}>
+            {t.pm_round} {Math.min(currentRound, match.rounds)}/{match.rounds}
+          </div>
+        )}
+        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 2, maxWidth: 80 }}>
+          {rounds.map(r => (
+            <span key={r.number} style={{
+              display: "inline-block", width: 10, height: 10,
+              borderRadius: "50%",
+              background: r.result === "goal" ? "var(--gold)"
+                : r.result === "saved" ? "rgba(255,255,255,.2)"
+                : r.result === "cheat" ? "#cc2244"
+                : "rgba(255,255,255,.1)",
+              border: `1px solid ${r.number > match.rounds ? "rgba(245,158,11,.5)" : "rgba(255,255,255,.2)"}`,
+            }} />
+          ))}
         </div>
-        {rounds.map(r => (
-          <span key={r.number} style={{
-            display: "inline-block", width: 10, height: 10,
-            borderRadius: "50%", margin: "2px 2px 0",
-            background: r.result === "goal" ? "var(--gold)"
-              : r.result === "saved" ? "rgba(255,255,255,.2)"
-              : r.result === "cheat" ? "#cc2244"
-              : "rgba(255,255,255,.1)",
-            border: "1px solid rgba(255,255,255,.2)",
-          }} />
-        ))}
       </div>
 
       <PlayerSide picture={challengedProfile?.picture} name={challengedName} score={score.challenged} isMe={!isChallenger} />
@@ -622,13 +630,12 @@ export function PenaltyMatchView({
 // ─── Tarjetas de partido (usan useProfile para avatar + nombre) ───────────────
 
 function IncomingMatchCard({
-  match,
-  isFinished,
-  onEnterMatch,
+  match, isFinished, onEnterMatch, onChallenge,
 }: {
   match: PenaltyMatchType;
   isFinished: boolean;
   onEnterMatch: (m: PenaltyMatchType) => void;
+  onChallenge: (pubkey: string) => void;
 }) {
   const { t } = useLang();
   const profile = useProfile(match.challenger);
@@ -659,9 +666,10 @@ function IncomingMatchCard({
         </div>
       </div>
       {isFinished ? (
-        <div style={{ fontSize: 11, fontWeight: 900, fontFamily: "var(--condensed)", color: "#52b788", flexShrink: 0, display: "flex", alignItems: "center", gap: 4 }}>
-          {t.pm_finished}
-        </div>
+        <button
+          onClick={() => onChallenge(match.challenger)}
+          style={{ background: "transparent", color: "var(--gold)", border: "1px solid rgba(232,185,35,.4)", padding: "6px 10px", borderRadius: 7, fontWeight: 900, fontSize: 10, cursor: "pointer", flexShrink: 0, fontFamily: "var(--condensed)" }}
+        >{t.pm_rechallenge}</button>
       ) : (
         <button
           onClick={() => onEnterMatch(match)}
@@ -673,15 +681,13 @@ function IncomingMatchCard({
 }
 
 function OutgoingMatchCard({
-  match,
-  isFinished,
-  onEnterMatch,
-  onCancel,
+  match, isFinished, onEnterMatch, onCancel, onChallenge,
 }: {
   match: PenaltyMatchType;
   isFinished: boolean;
   onEnterMatch: (m: PenaltyMatchType) => void;
   onCancel: (m: PenaltyMatchType) => void;
+  onChallenge: (pubkey: string) => void;
 }) {
   const { t } = useLang();
   const profile = useProfile(match.challenged);
@@ -711,7 +717,10 @@ function OutgoingMatchCard({
         </div>
       </div>
       {isFinished ? (
-        <div style={{ fontSize: 11, fontWeight: 900, fontFamily: "var(--condensed)", color: "#52b788", flexShrink: 0 }}>✓</div>
+        <button
+          onClick={() => onChallenge(match.challenged)}
+          style={{ background: "transparent", color: "var(--gold)", border: "1px solid rgba(232,185,35,.4)", padding: "6px 10px", borderRadius: 7, fontWeight: 900, fontSize: 10, cursor: "pointer", flexShrink: 0, fontFamily: "var(--condensed)" }}
+        >{t.pm_rechallenge}</button>
       ) : (
         <>
           <button
@@ -745,7 +754,6 @@ export function PenaltyMatchLobby({
   });
   const [challenging, setChallenging]   = useState(false);
   const [inputPk, setInputPk]           = useState("");
-  const [inputRounds, setInputRounds]   = useState("3");
   const [publishing, setPublishing]     = useState(false);
   const [resolving, setResolving]       = useState(false);
   const [error, setError]               = useState<string | null>(null);
@@ -872,7 +880,7 @@ export function PenaltyMatchLobby({
     setError(null);
     setPublishing(true);
     try {
-      await createMatch(identity, resolvedProfile.pubkey, Number(inputRounds) || 3);
+      await createMatch(identity, resolvedProfile.pubkey, 3);
       setInputPk("");
       setResolvedProfile(null);
       setChallenging(false);
@@ -886,6 +894,13 @@ export function PenaltyMatchLobby({
   async function handleCancel(match: PenaltyMatchType) {
     if (!identity) return;
     await cancelMatch(identity, match);
+  }
+
+  function startChallenge(opponentPubkey: string) {
+    setInputPk(nip19.npubEncode(opponentPubkey));
+    setSuggestions([]);
+    setError(null);
+    setChallenging(true);
   }
 
   if (!identity) {
@@ -1026,22 +1041,6 @@ export function PenaltyMatchLobby({
             </div>
           )}
 
-          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-            <div style={{ fontSize: 10, color: "var(--muted)" }}>{t.pm_rounds_selector}</div>
-            {[1, 3, 5].map(n => (
-              <button
-                key={n}
-                onClick={() => setInputRounds(String(n))}
-                style={{
-                  background: inputRounds === String(n) ? "var(--gold)" : "var(--panel2)",
-                  color: inputRounds === String(n) ? "#030b18" : "var(--muted)",
-                  border: `1px solid ${inputRounds === String(n) ? "var(--gold)" : "var(--line)"}`,
-                  padding: "4px 12px", borderRadius: 6,
-                  fontWeight: 900, fontSize: 11, cursor: "pointer",
-                }}
-              >{n}</button>
-            ))}
-          </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button
               onClick={handleCreate}
@@ -1084,6 +1083,7 @@ export function PenaltyMatchLobby({
                 match={m}
                 isFinished={finishedIds.includes(m.id)}
                 onEnterMatch={onEnterMatch}
+                onChallenge={startChallenge}
               />
             ))}
           </div>
@@ -1104,6 +1104,7 @@ export function PenaltyMatchLobby({
                 isFinished={finishedIds.includes(m.id)}
                 onEnterMatch={onEnterMatch}
                 onCancel={handleCancel}
+                onChallenge={startChallenge}
               />
             ))}
           </div>

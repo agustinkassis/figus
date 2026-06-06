@@ -128,6 +128,7 @@ export interface MatchState {
   currentRound: number;   // 1-based, qué ronda se está jugando
   phase: "waiting_commit" | "waiting_block" | "waiting_reveal" | "finished";
   winner: string | null;  // pubkey del ganador, null si empate o no terminó
+  suddenDeath: boolean;   // true cuando se van a penales extra por empate
 }
 
 // ─── Parsers de eventos Nostr → tipos de dominio ──────────────────────────────
@@ -231,11 +232,12 @@ export function deriveMatchState(
     roundStates.push({ number: r, kicker, goalkeeper, commit, block, reveal, result });
   }
 
-  // Fase actual
+  // Fase actual después de las rondas iniciales
   const lastCompleted = roundStates.filter(r => r.result !== null).length;
   let phase: MatchState["phase"] = "finished";
   let currentRound = totalRounds;
   let winner: string | null = null;
+  let suddenDeath = false;
 
   if (lastCompleted < totalRounds || match.status === "finished") {
     const next = roundStates[lastCompleted];
@@ -254,10 +256,65 @@ export function deriveMatchState(
   }
 
   if (phase === "finished" || lastCompleted === totalRounds) {
-    phase = "finished";
-    if (score.challenger > score.challenged) winner = challenger;
-    else if (score.challenged > score.challenger) winner = challenged;
+    if (score.challenger > score.challenged) {
+      phase = "finished";
+      winner = challenger;
+    } else if (score.challenged > score.challenger) {
+      phase = "finished";
+      winner = challenged;
+    } else if (match.status === "finished") {
+      phase = "finished";
+    } else {
+      // Empate → muerte súbita: seguir pateando hasta que alguien falle
+      suddenDeath = true;
+      let sdR = totalRounds + 1;
+      while (true) {
+        const kicker     = kickerOf(sdR);
+        const goalkeeper = goalkeeperOf(sdR);
+
+        const commit = commits
+          .filter(c => c.round === sdR && c.kicker === kicker)
+          .sort((a, b) => a.createdAt - b.createdAt)[0] ?? null;
+
+        const block = commit
+          ? blocks
+              .filter(b => b.round === sdR && b.commitId === commit.id && b.goalkeeper === goalkeeper)
+              .sort((a, b) => a.createdAt - b.createdAt)[0] ?? null
+          : null;
+
+        const reveal = (commit && block)
+          ? reveals
+              .filter(rv => rv.round === sdR && rv.commitId === commit.id && rv.kicker === kicker)
+              .sort((a, b) => a.createdAt - b.createdAt)[0] ?? null
+          : null;
+
+        if (!reveal) {
+          // Ronda en curso
+          if (!commit) { phase = "waiting_commit"; currentRound = sdR; }
+          else if (!block) { phase = "waiting_block"; currentRound = sdR; }
+          else { phase = "waiting_reveal"; currentRound = sdR; }
+          break;
+        }
+
+        let result: RoundResult | null = null;
+        if (!verifyCommit(reveal.zone, reveal.nonce, commit!.commit)) {
+          result = "cheat";
+        } else {
+          result = resolveKick(reveal.zone, block!.col) ? "goal" : "saved";
+        }
+        roundStates.push({ number: sdR, kicker, goalkeeper, commit: commit!, block: block!, reveal, result });
+
+        if (result === "saved" || result === "cheat") {
+          // El portero ganó
+          winner = goalkeeper;
+          phase = "finished";
+          break;
+        }
+        // Gol → continúa muerte súbita
+        sdR++;
+      }
+    }
   }
 
-  return { match, rounds: roundStates, score, currentRound, phase, winner };
+  return { match, rounds: roundStates, score, currentRound, phase, winner, suddenDeath };
 }
