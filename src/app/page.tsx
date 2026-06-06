@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { EventTemplate } from "nostr-tools";
 import { useIdentity } from "@/hooks/useIdentity";
 import { useGameState } from "@/hooks/useGameState";
+import { useOpenMatches } from "@/hooks/usePenaltyMatch";
 import { Connect } from "@/components/Connect";
 import { Album } from "@/components/Album";
 import { Packs, PackReveal } from "@/components/Packs";
@@ -44,6 +45,8 @@ function HomeInner() {
   const pubkey = identity?.pubkey ?? null;
   const { ownership, listings, settlements, owned, dupes, loading, refresh, hasClaimedFreePack, claimPack, addSticker } =
     useGameState(pubkey);
+  const { incoming: pendingChallenges } = useOpenMatches(pubkey);
+  const hasPendingChallenge = pendingChallenges.length > 0;
 
   const [tab, setTab] = useState<Tab>("album");
   const [toast, setToast] = useState<string | null>(null);
@@ -606,9 +609,22 @@ function HomeInner() {
                   fontFamily: "var(--condensed)",
                   letterSpacing: 1,
                   transition: "color .2s",
+                  position: "relative",
                 }}
               >
                 {l}
+                {k === "game" && hasPendingChallenge && (
+                  <span style={{
+                    position: "absolute",
+                    top: 6,
+                    right: 8,
+                    width: 7,
+                    height: 7,
+                    borderRadius: "50%",
+                    background: "#ef4444",
+                    boxShadow: "0 0 6px #ef444488",
+                  }} />
+                )}
               </button>
             ))}
           </nav>
