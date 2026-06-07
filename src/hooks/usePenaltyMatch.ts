@@ -249,7 +249,7 @@ export function usePenaltyMatch(
 export async function createMatch(
   identity: Identity,
   challenged: string,
-  rounds = 4,
+  rounds = 2,
 ): Promise<string> {
   const ts = Math.floor(Date.now() / 1000);
   const d  = `pmatch:${identity.pubkey.slice(0, 8)}:${ts}`;

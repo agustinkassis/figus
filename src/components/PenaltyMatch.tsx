@@ -167,7 +167,7 @@ function Scoreboard({
           </div>
         ) : (
           <div style={{ fontSize: 10, color: "rgba(255,255,255,.4)", fontFamily: "var(--condensed)", letterSpacing: 1 }}>
-            {t.pm_round} {Math.min(currentRound, match.rounds)}/{match.rounds / 2} c/u
+            {t.pm_round} {Math.min(currentRound, match.rounds)}/{match.rounds}
           </div>
         )}
         <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 2, maxWidth: 80 }}>
