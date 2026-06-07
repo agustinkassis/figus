@@ -311,6 +311,7 @@ export function PenaltyMatchView({
     try { const v = localStorage.getItem(lsLostKey); return v ? Number(v) : null; } catch { return null; }
   });
   const stealCleanupRef = useRef<(() => void) | null>(null);
+  const stolenCardRef   = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => () => { stealCleanupRef.current?.(); }, []);
 
@@ -588,7 +589,9 @@ export function PenaltyMatchView({
               )}
               {stealPhase === "done" && stolenNum !== null && (
                 <div>
-                  <StolenStickerCard num={stolenNum} won />
+                  <div ref={stolenCardRef}>
+                    <StolenStickerCard num={stolenNum} won />
+                  </div>
                   {(() => {
                     const s = CATALOG[stolenNum];
                     const opponentPubkey = isChallenger ? match.challenged : match.challenger;
@@ -599,6 +602,7 @@ export function PenaltyMatchView({
                         content={content}
                         identity={identity}
                         tags={[["p", opponentPubkey]]}
+                        cardRef={stolenCardRef}
                         style={{ marginTop: 8, width: "100%" }}
                       />
                     );

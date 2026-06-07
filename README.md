@@ -1,6 +1,6 @@
 # Figus — Álbum del Mundial 2026 en Nostr
 
-Álbum de figuritas del FIFA World Cup 2026™ construido sobre Nostr + Lightning. Sin base de datos — todo el estado vive en los relays. Desplegado en [figusmundial.rho.vercel.app](https://figusmundial.rho.vercel.app).
+Álbum de figuritas del FIFA World Cup 2026™ construido sobre Nostr + Lightning. Sin base de datos — todo el estado vive en los relays. Desplegado en [figusmundial-rho.vercel.app](https://figusmundial-rho.vercel.app).
 
 ![Figus Mundial 2026](public/screenshot.png)
 

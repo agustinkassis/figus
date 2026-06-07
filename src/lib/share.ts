@@ -3,7 +3,7 @@ import type { Identity } from "./identity";
 import { signEvent } from "./identity";
 import { getPool, getRelays } from "./pool";
 
-export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://figusmundial.rho.vercel.app";
+export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://figusmundial-rho.vercel.app";
 
 export async function shareNote(
   content: string,
