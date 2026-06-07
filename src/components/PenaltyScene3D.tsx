@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame, useLoader } from "@react-three/fiber";
-import { useFBX, useAnimations, useGLTF } from "@react-three/drei";
+import { useFBX, useAnimations } from "@react-three/drei";
 import { FBXLoader } from "three-stdlib";
 import * as THREE from "three";
 import {
@@ -203,9 +203,54 @@ function Lights() {
 
 // ── Goalkeeper ────────────────────────────────────────────────────────────────
 
-type KeeperGLTF = {
-  materials: { "Material.001": THREE.MeshStandardMaterial };
-};
+// Goalkeeper kit shader — colors the single-mesh Mixamo FBX by bind-pose Y
+// (object-space cm before skinning) so the kit follows the skeleton properly.
+// Y thresholds are for the standard Mixamo Beta character (170 cm model):
+//   > 155 → head/skin   105-155 → jersey (lime)   72-105 → shorts (navy)
+//   38-72 → socks       < 38    → boots
+// Gloves: Y 75-125 AND |X| > 60 → bright orange.
+function makeKeeperMaterial(): THREE.MeshStandardMaterial {
+  const mat = new THREE.MeshStandardMaterial({ roughness: 0.72, metalness: 0.0 });
+
+  mat.onBeforeCompile = (shader) => {
+    shader.vertexShader   = `varying vec2 vKitPos;\n`   + shader.vertexShader;
+    shader.fragmentShader = `varying vec2 vKitPos;\n` + shader.fragmentShader;
+
+    // Sample bind-pose position BEFORE skinning_vertex applies bone transforms
+    shader.vertexShader = shader.vertexShader.replace(
+      "#include <begin_vertex>",
+      `#include <begin_vertex>
+       vKitPos = vec2(transformed.x, transformed.y);`,
+    );
+
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <color_fragment>",
+      `#include <color_fragment>
+       {
+         float ky = vKitPos.y;
+         float kx = abs(vKitPos.x);
+         bool isGlove = (ky > 75.0 && ky < 125.0 && kx > 60.0);
+         vec3 kitCol;
+         if (ky > 155.0) {
+           kitCol = vec3(0.93, 0.73, 0.52);   // head — skin
+         } else if (isGlove) {
+           kitCol = vec3(1.0, 0.48, 0.04);    // gloves — orange
+         } else if (ky > 105.0) {
+           kitCol = vec3(0.70, 0.92, 0.02);   // jersey — lime yellow
+         } else if (ky > 72.0) {
+           kitCol = vec3(0.04, 0.08, 0.44);   // shorts — navy
+         } else if (ky > 38.0) {
+           kitCol = vec3(0.88, 0.90, 0.94);   // socks — light grey
+         } else {
+           kitCol = vec3(0.07, 0.07, 0.12);   // boots — near black
+         }
+         diffuseColor.rgb = kitCol;
+       }`,
+    );
+  };
+
+  return mat;
+}
 
 function Keeper({
   keeperRef,
@@ -253,17 +298,7 @@ function Keeper({
 
   const { actions } = useAnimations(clips, keeperRef);
 
-  // Apply ostrich texture from arquero.glb — same purple palette, different UV
-  const { materials: ostrichMats } = useGLTF("/arquero.glb") as unknown as KeeperGLTF;
-  const keeperMat = useMemo(() => {
-    const src = ostrichMats["Material.001"];
-    return new THREE.MeshStandardMaterial({
-      map:       src?.map       ?? null,
-      roughness: src?.roughness ?? 0.65,
-      metalness: src?.metalness ?? 0.05,
-      color:     src?.color    ?? new THREE.Color("#7a3db5"),
-    });
-  }, [ostrichMats]);
+  const keeperMat = useMemo(() => makeKeeperMaterial(), []);
 
   useEffect(() => {
     primaryFbx.traverse((obj) => {
@@ -306,12 +341,10 @@ function Keeper({
 
   return (
     <group ref={keeperRef} position={[0, 0, GOAL_Z + 0.45]}>
-      <primitive object={primaryFbx} scale={0.012} rotation={[0, Math.PI, 0]} />
+      <primitive object={primaryFbx} scale={0.012} rotation={[0, 0, 0]} />
     </group>
   );
 }
-
-useGLTF.preload("/arquero.glb");
 
 // ── Ball — procedural soccer ball shader ──────────────────────────────────────
 // Pattern: 12 black pentagons at icosahedron vertices + white hexagons.
