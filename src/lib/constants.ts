@@ -26,7 +26,7 @@ export const ALBUM_ID = process.env.NEXT_PUBLIC_ALBUM_ID || "mundial-2026";
 export const ISSUER_PUBKEY = process.env.NEXT_PUBLIC_ISSUER_PUBKEY || "";
 
 export const RELAYS = (process.env.NEXT_PUBLIC_RELAYS ||
-  "wss://relay.damus.io,wss://nos.lol,wss://relay.nostr.band")
+  "wss://relay.damus.io,wss://nos.lol,wss://relay.nostr.band,wss://relay.primal.net,wss://nostr.mom")
   .split(",")
   .map((r) => r.trim())
   .filter(Boolean);
