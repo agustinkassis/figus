@@ -263,53 +263,60 @@ export function deriveMatchState(
     } else if (match.status === "finished") {
       phase = "finished";
     } else {
-      // Empate → muerte súbita: seguir pateando hasta que alguien falle
+      // Empate → muerte súbita en pares (challenger patea primero, luego challenged)
+      // Termina cuando al final de un par los marcadores difieren
       suddenDeath = true;
       let sdR = totalRounds + 1;
+
+      outer:
       while (true) {
-        const kicker     = kickerOf(sdR);
-        const goalkeeper = goalkeeperOf(sdR);
+        for (let i = 0; i < 2; i++) {
+          const curR       = sdR + i;
+          const kicker     = kickerOf(curR);
+          const goalkeeper = goalkeeperOf(curR);
 
-        const commit = commits
-          .filter(c => c.round === sdR && c.kicker === kicker)
-          .sort((a, b) => a.createdAt - b.createdAt)[0] ?? null;
+          const commit = commits
+            .filter(c => c.round === curR && c.kicker === kicker)
+            .sort((a, b) => a.createdAt - b.createdAt)[0] ?? null;
+          const block = commit
+            ? blocks
+                .filter(b => b.round === curR && b.commitId === commit.id && b.goalkeeper === goalkeeper)
+                .sort((a, b) => a.createdAt - b.createdAt)[0] ?? null
+            : null;
+          const reveal = (commit && block)
+            ? reveals
+                .filter(rv => rv.round === curR && rv.commitId === commit.id && rv.kicker === kicker)
+                .sort((a, b) => a.createdAt - b.createdAt)[0] ?? null
+            : null;
 
-        const block = commit
-          ? blocks
-              .filter(b => b.round === sdR && b.commitId === commit.id && b.goalkeeper === goalkeeper)
-              .sort((a, b) => a.createdAt - b.createdAt)[0] ?? null
-          : null;
+          if (!reveal) {
+            if (!commit) { phase = "waiting_commit"; currentRound = curR; }
+            else if (!block) { phase = "waiting_block"; currentRound = curR; }
+            else { phase = "waiting_reveal"; currentRound = curR; }
+            break outer;
+          }
 
-        const reveal = (commit && block)
-          ? reveals
-              .filter(rv => rv.round === sdR && rv.commitId === commit.id && rv.kicker === kicker)
-              .sort((a, b) => a.createdAt - b.createdAt)[0] ?? null
-          : null;
-
-        if (!reveal) {
-          // Ronda en curso
-          if (!commit) { phase = "waiting_commit"; currentRound = sdR; }
-          else if (!block) { phase = "waiting_block"; currentRound = sdR; }
-          else { phase = "waiting_reveal"; currentRound = sdR; }
-          break;
-        }
-
-        let result: RoundResult | null = null;
-        if (!verifyCommit(reveal.zone, reveal.nonce, commit!.commit)) {
-          result = "cheat";
-        } else {
+          let result: RoundResult | null;
+          if (!verifyCommit(reveal.zone, reveal.nonce, commit!.commit)) {
+            result = "cheat";
+            roundStates.push({ number: curR, kicker, goalkeeper, commit: commit!, block: block!, reveal, result });
+            winner = goalkeeper;
+            phase = "finished";
+            break outer;
+          }
           result = resolveKick(reveal.zone, block!.col) ? "goal" : "saved";
+          roundStates.push({ number: curR, kicker, goalkeeper, commit: commit!, block: block!, reveal, result });
+          if (result === "goal") {
+            if (kicker === challenger) score.challenger++;
+            else score.challenged++;
+          }
         }
-        roundStates.push({ number: sdR, kicker, goalkeeper, commit: commit!, block: block!, reveal, result });
 
-        if (result === "saved" || result === "cheat") {
-          // El portero ganó
-          winner = goalkeeper;
-          phase = "finished";
-          break;
-        }
-        // Gol → continúa muerte súbita
-        sdR++;
+        // Par completo: ¿alguno adelante?
+        if (score.challenger > score.challenged) { winner = challenger; phase = "finished"; break; }
+        if (score.challenged > score.challenger) { winner = challenged; phase = "finished"; break; }
+        // Siguen empatados → siguiente par
+        sdR += 2;
       }
     }
   }

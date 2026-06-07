@@ -333,7 +333,7 @@ function HomeInner() {
     if (!identity) return notify("Conectate para desafiar");
     if (targetPubkey === pubkey) return;
     try {
-      await createMatch(identity, targetPubkey, 3);
+      await createMatch(identity, targetPubkey, 4);
       notify("⚽ Desafío enviado");
     } catch {
       notify("⚠️ No se pudo enviar el desafío");

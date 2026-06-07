@@ -167,7 +167,7 @@ function Scoreboard({
           </div>
         ) : (
           <div style={{ fontSize: 10, color: "rgba(255,255,255,.4)", fontFamily: "var(--condensed)", letterSpacing: 1 }}>
-            {t.pm_round} {Math.min(currentRound, match.rounds)}/{match.rounds}
+            {t.pm_round} {Math.min(currentRound, match.rounds)}/{match.rounds / 2} c/u
           </div>
         )}
         <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 2, maxWidth: 80 }}>
@@ -452,7 +452,7 @@ export function PenaltyMatchView({
           {t.pm_back}
         </button>
         <div style={{ fontSize: 16, fontWeight: 900, color: "var(--ink)", flex: 1 }}>
-          {t.pm_pvp_title} · {match.rounds} {t.pm_rounds_label}
+          {t.pm_pvp_title} · {match.rounds / 2} {t.pm_rounds_label} c/u
         </div>
       </div>
 
