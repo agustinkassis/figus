@@ -311,6 +311,62 @@ function ingestEvent(
   }
 }
 
+// ─── Hook: ¿tengo alguna acción pendiente en cualquier partida activa? ───────
+// Devuelve true si es mi turno en al menos una partida abierta → activa el punto rojo
+export function useHasMyTurn(myPubkey: string | null): boolean {
+  const { incoming, outgoing } = useOpenMatches(myPubkey);
+  const [hasTurn, setHasTurn] = useState(false);
+
+  useEffect(() => {
+    const allMatches = [...incoming, ...outgoing];
+    if (!myPubkey || allMatches.length === 0) { setHasTurn(false); return; }
+    let cancelled = false;
+
+    const coords = allMatches.map(m => `${KIND.PENALTY_MATCH}:${m.challenger}:${m.d}`);
+
+    async function check() {
+      if (cancelled) return;
+      const evs = await list([
+        { kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": coords },
+      ]);
+      if (cancelled) return;
+
+      let anyTurn = false;
+      for (const match of allMatches) {
+        const coord = `${KIND.PENALTY_MATCH}:${match.challenger}:${match.d}`;
+        const matchEvs = evs.filter(e => e.tags.some(t => t[0] === "a" && t[1] === coord));
+        const commits  = matchEvs.map(parseCommit).filter((c): c is PenaltyCommit => c !== null);
+        const blocks   = matchEvs.map(parseBlock).filter((b): b is PenaltyBlock   => b !== null);
+        const reveals  = matchEvs.map(parseReveal).filter((r): r is PenaltyReveal => r !== null);
+        const state    = deriveMatchState(match, commits, blocks, reveals);
+        if (state.phase === "finished") continue;
+        const r       = state.currentRound;
+        const kicker  = r % 2 === 1 ? match.challenger : match.challenged;
+        const keeper  = r % 2 === 1 ? match.challenged : match.challenger;
+        const myTurn  =
+          state.phase === "waiting_commit" ? myPubkey === kicker :
+          state.phase === "waiting_block"  ? myPubkey === keeper  :
+          state.phase === "waiting_reveal" ? myPubkey === kicker  :
+          false;
+        if (myTurn) { anyTurn = true; break; }
+      }
+      setHasTurn(anyTurn);
+    }
+
+    check();
+
+    // Recheck cuando llega cualquier evento de acción en estas partidas
+    const unsub = subscribe(
+      [{ kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": coords }],
+      () => { check(); }
+    );
+
+    return () => { cancelled = true; unsub(); };
+  }, [incoming, outgoing, myPubkey]);
+
+  return hasTurn;
+}
+
 // ─── Hook liviano: ¿es mi turno en esta partida? ──────────────────────────────
 // Hace un list() de los eventos de la partida y devuelve true/false/null (null = cargando)
 export function useMatchTurn(match: PenaltyMatch, myPubkey: string | null): boolean | null {

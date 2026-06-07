@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { EventTemplate } from "nostr-tools";
 import { useIdentity } from "@/hooks/useIdentity";
 import { useGameState } from "@/hooks/useGameState";
-import { useOpenMatches, createMatch } from "@/hooks/usePenaltyMatch";
+import { useHasMyTurn, createMatch } from "@/hooks/usePenaltyMatch";
 import { Connect } from "@/components/Connect";
 import { Album } from "@/components/Album";
 import { Packs, PackReveal } from "@/components/Packs";
@@ -45,8 +45,7 @@ function HomeInner() {
   const pubkey = identity?.pubkey ?? null;
   const { ownership, listings, settlements, owned, dupes, loading, refresh, hasClaimedFreePack, claimPack, addSticker } =
     useGameState(pubkey);
-  const { incoming: pendingChallenges } = useOpenMatches(pubkey);
-  const hasPendingChallenge = pendingChallenges.length > 0;
+  const hasPendingChallenge = useHasMyTurn(pubkey);
 
   const VALID_TABS: Tab[] = ["album", "packs", "market", "fixture", "game"];
   const hashTab = (): Tab => {

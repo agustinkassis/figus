@@ -659,13 +659,14 @@ export function PenaltyMatchView({
 // ─── Tarjetas de partido (usan useProfile para avatar + nombre) ───────────────
 
 function IncomingMatchCard({
-  match, myPubkey, isFinished, onEnterMatch, onChallenge,
+  match, myPubkey, isFinished, onEnterMatch, onChallenge, onDismiss,
 }: {
   match: PenaltyMatchType;
   myPubkey: string;
   isFinished: boolean;
   onEnterMatch: (m: PenaltyMatchType) => void;
   onChallenge: (pubkey: string) => void;
+  onDismiss?: () => void;
 }) {
   const { t } = useLang();
   const profile = useProfile(match.challenger);
@@ -699,10 +700,18 @@ function IncomingMatchCard({
         </div>
       </div>
       {isFinished ? (
-        <button
-          onClick={() => onChallenge(match.challenger)}
-          style={{ background: "transparent", color: "var(--gold)", border: "1px solid rgba(232,185,35,.4)", padding: "6px 10px", borderRadius: 7, fontWeight: 900, fontSize: 10, cursor: "pointer", flexShrink: 0, fontFamily: "var(--condensed)" }}
-        >{t.pm_rechallenge}</button>
+        <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+          <button
+            onClick={() => onChallenge(match.challenger)}
+            style={{ background: "transparent", color: "var(--gold)", border: "1px solid rgba(232,185,35,.4)", padding: "6px 10px", borderRadius: 7, fontWeight: 900, fontSize: 10, cursor: "pointer", fontFamily: "var(--condensed)" }}
+          >{t.pm_rechallenge}</button>
+          {onDismiss && (
+            <button
+              onClick={onDismiss}
+              style={{ background: "transparent", color: "var(--muted)", border: "1px solid var(--line)", width: 28, borderRadius: 7, fontWeight: 900, fontSize: 12, cursor: "pointer", lineHeight: 1 }}
+            >×</button>
+          )}
+        </div>
       ) : (
         <button
           onClick={() => onEnterMatch(match)}
@@ -720,7 +729,7 @@ function IncomingMatchCard({
 }
 
 function OutgoingMatchCard({
-  match, myPubkey, isFinished, onEnterMatch, onCancel, onChallenge,
+  match, myPubkey, isFinished, onEnterMatch, onCancel, onChallenge, onDismiss,
 }: {
   match: PenaltyMatchType;
   myPubkey: string;
@@ -728,6 +737,7 @@ function OutgoingMatchCard({
   onEnterMatch: (m: PenaltyMatchType) => void;
   onCancel: (m: PenaltyMatchType) => void;
   onChallenge: (pubkey: string) => void;
+  onDismiss?: () => void;
 }) {
   const { t } = useLang();
   const profile = useProfile(match.challenged);
@@ -761,10 +771,18 @@ function OutgoingMatchCard({
         </div>
       </div>
       {isFinished ? (
-        <button
-          onClick={() => onChallenge(match.challenged)}
-          style={{ background: "transparent", color: "var(--gold)", border: "1px solid rgba(232,185,35,.4)", padding: "6px 10px", borderRadius: 7, fontWeight: 900, fontSize: 10, cursor: "pointer", flexShrink: 0, fontFamily: "var(--condensed)" }}
-        >{t.pm_rechallenge}</button>
+        <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+          <button
+            onClick={() => onChallenge(match.challenged)}
+            style={{ background: "transparent", color: "var(--gold)", border: "1px solid rgba(232,185,35,.4)", padding: "6px 10px", borderRadius: 7, fontWeight: 900, fontSize: 10, cursor: "pointer", fontFamily: "var(--condensed)" }}
+          >{t.pm_rechallenge}</button>
+          {onDismiss && (
+            <button
+              onClick={onDismiss}
+              style={{ background: "transparent", color: "var(--muted)", border: "1px solid var(--line)", width: 28, borderRadius: 7, fontWeight: 900, fontSize: 12, cursor: "pointer", lineHeight: 1 }}
+            >×</button>
+          )}
+        </div>
       ) : (
         <>
           <button
@@ -804,6 +822,17 @@ export function PenaltyMatchLobby({
   const [finishedIds] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem("figus_finished_matches") || "[]"); } catch { return []; }
   });
+  const [dismissedIds, setDismissedIds] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("figus_dismissed_matches") || "[]"); } catch { return []; }
+  });
+
+  const dismissMatch = (id: string) => {
+    setDismissedIds(prev => {
+      const next = [...prev, id];
+      try { localStorage.setItem("figus_dismissed_matches", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
   const [challenging, setChallenging]   = useState(false);
   const [inputPk, setInputPk]           = useState("");
   const [publishing, setPublishing]     = useState(false);
@@ -1153,7 +1182,7 @@ export function PenaltyMatchLobby({
         const allMatches = [
           ...incoming.map(m => ({ m, isIncoming: true })),
           ...outgoing.map(m => ({ m, isIncoming: false })),
-        ];
+        ].filter(({ m }) => !dismissedIds.includes(m.id));
         const active   = allMatches.filter(({ m }) => !finishedIds.includes(m.id));
         const finished = allMatches.filter(({ m }) =>  finishedIds.includes(m.id));
 
@@ -1162,11 +1191,13 @@ export function PenaltyMatchLobby({
             <IncomingMatchCard
               key={m.id} match={m} myPubkey={myPubkey ?? ""} isFinished={finishedIds.includes(m.id)}
               onEnterMatch={onEnterMatch} onChallenge={startChallenge}
+              onDismiss={finishedIds.includes(m.id) ? () => dismissMatch(m.id) : undefined}
             />
           ) : (
             <OutgoingMatchCard
               key={m.id} match={m} myPubkey={myPubkey ?? ""} isFinished={finishedIds.includes(m.id)}
               onEnterMatch={onEnterMatch} onCancel={handleCancel} onChallenge={startChallenge}
+              onDismiss={finishedIds.includes(m.id) ? () => dismissMatch(m.id) : undefined}
             />
           );
 
