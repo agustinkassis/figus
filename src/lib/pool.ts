@@ -20,11 +20,13 @@ export function warmupRelays(): void {
   setTimeout(() => sub.close(), 3000);
 }
 
-// Query puntual: junta eventos de varios filtros hasta EOSE y resuelve
+// Query puntual: junta eventos de varios filtros hasta EOSE y resuelve.
+// maxWait 2000ms: con 5 relays confiables el EOSE llega mucho antes;
+// cualquier relay que no responda en 2s se ignora sin bloquear el resto.
 export async function list(filters: Filter[]): Promise<Event[]> {
   const p = getPool();
   const results = await Promise.all(
-    filters.map((f) => p.querySync(RELAYS, f, { maxWait: 4000 }))
+    filters.map((f) => p.querySync(RELAYS, f, { maxWait: 2000 }))
   );
   const byId = new Map<string, Event>();
   for (const arr of results) for (const ev of arr) byId.set(ev.id, ev);

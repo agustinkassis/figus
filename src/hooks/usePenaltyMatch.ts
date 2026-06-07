@@ -40,11 +40,14 @@ export function useOpenMatches(myPubkey: string | null) {
         .filter((m): m is PenaltyMatch => m !== null && m.status === "open");
     };
 
+    // Solo partidas de los últimos 60 días — evita traer eventos históricos indefinidamente
+    const since = Math.floor(Date.now() / 1000) - 60 * 24 * 3600;
+
     (async () => {
       setLoading(true);
       const [recv, sent] = await Promise.all([
-        list([{ kinds: [KIND.PENALTY_MATCH], "#p": [myPubkey] }]),
-        list([{ kinds: [KIND.PENALTY_MATCH], authors: [myPubkey] }]),
+        list([{ kinds: [KIND.PENALTY_MATCH], "#p": [myPubkey], since }]),
+        list([{ kinds: [KIND.PENALTY_MATCH], authors: [myPubkey], since }]),
       ]);
       if (!cancelled) {
         setIncoming(parseAll(recv));
@@ -55,13 +58,13 @@ export function useOpenMatches(myPubkey: string | null) {
 
     const unsub = subscribe(
       [
-        { kinds: [KIND.PENALTY_MATCH], "#p": [myPubkey] },
-        { kinds: [KIND.PENALTY_MATCH], authors: [myPubkey] },
+        { kinds: [KIND.PENALTY_MATCH], "#p": [myPubkey], since },
+        { kinds: [KIND.PENALTY_MATCH], authors: [myPubkey], since },
       ],
       () => {
         Promise.all([
-          list([{ kinds: [KIND.PENALTY_MATCH], "#p": [myPubkey] }]),
-          list([{ kinds: [KIND.PENALTY_MATCH], authors: [myPubkey] }]),
+          list([{ kinds: [KIND.PENALTY_MATCH], "#p": [myPubkey], since }]),
+          list([{ kinds: [KIND.PENALTY_MATCH], authors: [myPubkey], since }]),
         ]).then(([recv, sent]) => {
           if (!cancelled) {
             setIncoming(parseAll(recv));
@@ -107,10 +110,12 @@ export function usePenaltyMatch(
     let cancelled = false;
 
     const coord = `${KIND.PENALTY_MATCH}:${match.challenger}:${match.d}`;
+    // Commits/blocks/reveals solo pueden existir desde la creación de la partida
+    const since = match.createdAt - 60;
 
     (async () => {
       const evs = await list([
-        { kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": [coord] },
+        { kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": [coord], since },
       ]);
       if (cancelled) return;
       for (const ev of evs) ingestEvent(ev, match, commitsRef, blocksRef, revealsRef);
@@ -118,7 +123,7 @@ export function usePenaltyMatch(
     })();
 
     const unsub = subscribe(
-      [{ kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": [coord] }],
+      [{ kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": [coord], since }],
       (ev) => {
         ingestEvent(ev, match, commitsRef, blocksRef, revealsRef);
         rebuild(match);
@@ -328,6 +333,8 @@ export function useTurnMap(
     if (!myPubkey || allMatches.length === 0) { setTurnMap(new Map); return; }
     let cancelled = false;
     const coords = allMatches.map(m => `${KIND.PENALTY_MATCH}:${m.challenger}:${m.d}`);
+    // since = la más antigua de las partidas abiertas menos 1 minuto de margen
+    const since = Math.min(...allMatches.map(m => m.createdAt)) - 60;
 
     function turnFor(match: PenaltyMatch, evs: Event[]): boolean {
       const coord = `${KIND.PENALTY_MATCH}:${match.challenger}:${match.d}`;
@@ -350,7 +357,7 @@ export function useTurnMap(
     async function check() {
       if (cancelled) return;
       const evs = await list([
-        { kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": coords },
+        { kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": coords, since },
       ]);
       if (cancelled) return;
       const next = new Map<string, boolean | null>();
@@ -360,7 +367,7 @@ export function useTurnMap(
 
     check();
     const unsub = subscribe(
-      [{ kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": coords }],
+      [{ kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": coords, since }],
       () => check(),
     );
     return () => { cancelled = true; unsub(); };
