@@ -22,9 +22,9 @@ export const BALL_HOME = [0, 0.12, 0] as const;
 export const COL_X = [-2.05, 0, 2.05] as [number, number, number];
 export const ROW_Y = [2.05, 1.25, 0.55] as [number, number, number];
 
-/** 3D world position for a shot aimed at zone 0-8, inside the goal mouth. */
+/** 3D world position for a shot aimed at zone 0-2 (left/center/right), mid-goal height. */
 export function zone3DTarget(zone: number): [number, number, number] {
-  return [COL_X[zone % 3], ROW_Y[Math.floor(zone / 3)], GOAL_Z + 0.15];
+  return [COL_X[zone], ROW_Y[1], GOAL_Z + 0.15];
 }
 
 /**

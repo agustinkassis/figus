@@ -2,25 +2,23 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 
-/** Zonas cubiertas por cada columna del arquero (3 cols × 3 filas = 9 zonas) */
+/** Zonas cubiertas por cada columna del arquero — 3 zonas simétricas */
 export const COLUMN_ZONES: Record<number, number[]> = {
-  0: [0, 3, 6],
-  1: [1, 4, 7],
-  2: [2, 5, 8],
+  0: [0],
+  1: [1],
+  2: [2],
 };
 
 /** Posición visual (left%, top%) de cada zona dentro del arco */
 export const ZONE_POS: [number, number][] = [
-  [16, 28], [50, 28], [84, 28],
-  [16, 58], [50, 58], [84, 58],
-  [16, 84], [50, 84], [84, 84],
+  [16, 55], [50, 55], [84, 55],
 ];
 
 /** Centro horizontal del arquero por columna */
 export const KEEPER_LEFT = [14, 50, 86];
 
-/** Flechas de dirección para la grilla de apuntado */
-export const ARROWS = ["↖", "↑", "↗", "←", "·", "→", "↙", "↓", "↘"];
+/** Etiquetas de dirección para los 3 sectores */
+export const ARROWS = ["⬅", "⬆", "➡"];
 
 /**
  * Resuelve un penal.

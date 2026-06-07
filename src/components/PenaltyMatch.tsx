@@ -42,6 +42,7 @@ async function fetchNostrMeta(pubkey: string): Promise<{ name?: string; picture?
 function AimGrid({ onKick, disabled }: { onKick: (zone: number) => void; disabled: boolean }) {
   const [hover, setHover] = useState<number | null>(null);
   const { t } = useLang();
+  const labels = [t.pm_left, t.pm_center, t.pm_right];
 
   return (
     <div>
@@ -49,7 +50,7 @@ function AimGrid({ onKick, disabled }: { onKick: (zone: number) => void; disable
         {t.pm_choose_zone}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 4 }}>
-        {ARROWS.map((arrow, i) => (
+        {labels.map((label, i) => (
           <button
             key={i}
             disabled={disabled}
@@ -59,13 +60,15 @@ function AimGrid({ onKick, disabled }: { onKick: (zone: number) => void; disable
             style={{
               background: hover === i ? "rgba(255,255,255,.22)" : "rgba(255,255,255,.07)",
               border: `1px solid ${hover === i ? "rgba(255,255,255,.6)" : "rgba(255,255,255,.15)"}`,
-              borderRadius: 6, height: 40,
+              borderRadius: 6, height: 44,
               cursor: disabled ? "not-allowed" : "pointer",
-              color: "rgba(255,255,255,.55)", fontSize: 16,
+              color: "rgba(255,255,255,.7)", fontSize: 10,
+              fontFamily: "var(--condensed)", fontWeight: 900,
+              letterSpacing: 0.3,
               transition: "background .1s, border-color .1s",
               opacity: disabled ? 0.4 : 1,
             }}
-          >{arrow}</button>
+          >{label}</button>
         ))}
       </div>
     </div>

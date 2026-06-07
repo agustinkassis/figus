@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useState, useEffect } from "react";
-import { ARROWS, resolveKick, todayKey } from "@/lib/penalty";
+import { resolveKick, todayKey } from "@/lib/penalty";
 import { useLang } from "@/contexts/LangContext";
 import { Scene3DErrorBoundary, Scene2DFallback } from "@/components/Scene3DErrorBoundary";
 
@@ -133,7 +133,7 @@ export function PenaltyGame({
               {t.pm_choose_zone}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 }}>
-              {ARROWS.map((arrow, i) => (
+              {[t.pm_left, t.pm_center, t.pm_right].map((label, i) => (
                 <button
                   key={i}
                   onClick={() => kick(i)}
@@ -151,14 +151,17 @@ export function PenaltyGame({
                     background: "rgba(255,255,255,.07)",
                     border: "1px solid rgba(255,255,255,.15)",
                     borderRadius: 6,
-                    height: 38,
+                    height: 44,
                     cursor: "pointer",
-                    color: "rgba(255,255,255,.55)",
-                    fontSize: 16,
+                    color: "rgba(255,255,255,.7)",
+                    fontSize: 10,
+                    fontFamily: "var(--condensed)",
+                    fontWeight: 900,
+                    letterSpacing: 0.3,
                     transition: "background .1s, border-color .1s",
                   }}
                 >
-                  {arrow}
+                  {label}
                 </button>
               ))}
             </div>
