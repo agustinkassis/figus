@@ -311,18 +311,41 @@ function ingestEvent(
   }
 }
 
-// ─── Hook: ¿tengo alguna acción pendiente en cualquier partida activa? ───────
-// Devuelve true si es mi turno en al menos una partida abierta → activa el punto rojo
-export function useHasMyTurn(myPubkey: string | null): boolean {
-  const { incoming, outgoing } = useOpenMatches(myPubkey);
-  const [hasTurn, setHasTurn] = useState(false);
+// ─── Hook: estado de turno para un conjunto de partidas (batch query) ────────
+// Una sola query a los relays para todas las partidas → map matchId → myTurn
+// Usa el string de IDs como clave estable para no re-suscribir en cada render
+export function useTurnMap(
+  allMatches: PenaltyMatch[],
+  myPubkey: string | null,
+): Map<string, boolean | null> {
+  const [turnMap, setTurnMap] = useState<Map<string, boolean | null>>(new Map);
+
+  // Clave estable: solo cambia si el conjunto de partidas cambia
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const coordsKey = allMatches.map(m => m.id).join(",");
 
   useEffect(() => {
-    const allMatches = [...incoming, ...outgoing];
-    if (!myPubkey || allMatches.length === 0) { setHasTurn(false); return; }
+    if (!myPubkey || allMatches.length === 0) { setTurnMap(new Map); return; }
     let cancelled = false;
-
     const coords = allMatches.map(m => `${KIND.PENALTY_MATCH}:${m.challenger}:${m.d}`);
+
+    function turnFor(match: PenaltyMatch, evs: Event[]): boolean {
+      const coord = `${KIND.PENALTY_MATCH}:${match.challenger}:${match.d}`;
+      const matchEvs = evs.filter(e => e.tags.some(t => t[0] === "a" && t[1] === coord));
+      const commits  = matchEvs.map(parseCommit).filter((c): c is PenaltyCommit => c !== null);
+      const blocks   = matchEvs.map(parseBlock).filter((b): b is PenaltyBlock   => b !== null);
+      const reveals  = matchEvs.map(parseReveal).filter((r): r is PenaltyReveal => r !== null);
+      const state    = deriveMatchState(match, commits, blocks, reveals);
+      if (state.phase === "finished") return false;
+      const r      = state.currentRound;
+      const kicker = r % 2 === 1 ? match.challenger : match.challenged;
+      const keeper = r % 2 === 1 ? match.challenged : match.challenger;
+      return (
+        state.phase === "waiting_commit" ? myPubkey === kicker :
+        state.phase === "waiting_block"  ? myPubkey === keeper  :
+        state.phase === "waiting_reveal" ? myPubkey === kicker  : false
+      );
+    }
 
     async function check() {
       if (cancelled) return;
@@ -330,82 +353,30 @@ export function useHasMyTurn(myPubkey: string | null): boolean {
         { kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": coords },
       ]);
       if (cancelled) return;
-
-      let anyTurn = false;
-      for (const match of allMatches) {
-        const coord = `${KIND.PENALTY_MATCH}:${match.challenger}:${match.d}`;
-        const matchEvs = evs.filter(e => e.tags.some(t => t[0] === "a" && t[1] === coord));
-        const commits  = matchEvs.map(parseCommit).filter((c): c is PenaltyCommit => c !== null);
-        const blocks   = matchEvs.map(parseBlock).filter((b): b is PenaltyBlock   => b !== null);
-        const reveals  = matchEvs.map(parseReveal).filter((r): r is PenaltyReveal => r !== null);
-        const state    = deriveMatchState(match, commits, blocks, reveals);
-        if (state.phase === "finished") continue;
-        const r       = state.currentRound;
-        const kicker  = r % 2 === 1 ? match.challenger : match.challenged;
-        const keeper  = r % 2 === 1 ? match.challenged : match.challenger;
-        const myTurn  =
-          state.phase === "waiting_commit" ? myPubkey === kicker :
-          state.phase === "waiting_block"  ? myPubkey === keeper  :
-          state.phase === "waiting_reveal" ? myPubkey === kicker  :
-          false;
-        if (myTurn) { anyTurn = true; break; }
-      }
-      setHasTurn(anyTurn);
+      const next = new Map<string, boolean | null>();
+      for (const m of allMatches) next.set(m.id, turnFor(m, evs));
+      setTurnMap(next);
     }
 
     check();
-
-    // Recheck cuando llega cualquier evento de acción en estas partidas
     const unsub = subscribe(
       [{ kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": coords }],
-      () => { check(); }
+      () => check(),
     );
-
     return () => { cancelled = true; unsub(); };
-  }, [incoming, outgoing, myPubkey]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coordsKey, myPubkey]); // clave estable en lugar de referencia de array
 
-  return hasTurn;
+  return turnMap;
 }
 
-// ─── Hook liviano: ¿es mi turno en esta partida? ──────────────────────────────
-// Hace un list() de los eventos de la partida y devuelve true/false/null (null = cargando)
-export function useMatchTurn(match: PenaltyMatch, myPubkey: string | null): boolean | null {
-  const [myTurn, setMyTurn] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    if (!myPubkey) { setMyTurn(false); return; }
-    let cancelled = false;
-    const coord = `${KIND.PENALTY_MATCH}:${match.challenger}:${match.d}`;
-
-    (async () => {
-      const evs = await list([
-        { kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": [coord] },
-      ]);
-
-      if (cancelled) return;
-
-      const commits = evs.map(parseCommit).filter((c): c is PenaltyCommit => c !== null);
-      const blocks  = evs.map(parseBlock).filter((b): b is PenaltyBlock  => b !== null);
-      const reveals = evs.map(parseReveal).filter((r): r is PenaltyReveal => r !== null);
-
-      const state = deriveMatchState(match, commits, blocks, reveals);
-      if (state.phase === "finished") { setMyTurn(false); return; }
-
-      const r = state.currentRound;
-      const kicker = r % 2 === 1 ? match.challenger : match.challenged;
-      const keeper  = r % 2 === 1 ? match.challenged : match.challenger;
-
-      const turn =
-        state.phase === "waiting_commit" ? myPubkey === kicker :
-        state.phase === "waiting_block"  ? myPubkey === keeper  :
-        state.phase === "waiting_reveal" ? myPubkey === kicker  :
-        false;
-
-      setMyTurn(turn);
-    })();
-
-    return () => { cancelled = true; };
-  }, [match, myPubkey]);
-
-  return myTurn;
+// ─── Hook: ¿tengo alguna acción pendiente? (derivado de useTurnMap) ──────────
+export function useHasMyTurn(
+  incoming: PenaltyMatch[],
+  outgoing: PenaltyMatch[],
+  myPubkey: string | null,
+): boolean {
+  const allMatches = [...incoming, ...outgoing];
+  const turnMap = useTurnMap(allMatches, myPubkey);
+  return Array.from(turnMap.values()).some(v => v === true);
 }

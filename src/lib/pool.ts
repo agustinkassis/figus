@@ -13,6 +13,13 @@ export function getRelays(): string[] {
   return RELAYS;
 }
 
+// Pre-establish WebSocket connections to all relays so the first real query is fast
+export function warmupRelays(): void {
+  const p = getPool();
+  const sub = p.subscribeMany(RELAYS, { kinds: [0], limit: 0 } as Filter, { onevent: () => {} });
+  setTimeout(() => sub.close(), 3000);
+}
+
 // Query puntual: junta eventos de varios filtros hasta EOSE y resuelve
 export async function list(filters: Filter[]): Promise<Event[]> {
   const p = getPool();

@@ -8,7 +8,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { ARROWS } from "@/lib/penalty";
 import type { MatchState, Round } from "@/lib/penalty";
 import type { PenaltyMatch as PenaltyMatchType } from "@/lib/penalty";
-import { usePenaltyMatch, useOpenMatches, useMatchTurn, createMatch, cancelMatch } from "@/hooks/usePenaltyMatch";
+import { usePenaltyMatch, useTurnMap, createMatch, cancelMatch } from "@/hooks/usePenaltyMatch";
 import type { EventTemplate, Event as NostrEvent } from "nostr-tools";
 import { signEvent } from "@/lib/identity";
 import { list, subscribe, getPool, getRelays } from "@/lib/pool";
@@ -659,10 +659,10 @@ export function PenaltyMatchView({
 // ─── Tarjetas de partido (usan useProfile para avatar + nombre) ───────────────
 
 function IncomingMatchCard({
-  match, myPubkey, isFinished, onEnterMatch, onChallenge, onDismiss,
+  match, myTurn, isFinished, onEnterMatch, onChallenge, onDismiss,
 }: {
   match: PenaltyMatchType;
-  myPubkey: string;
+  myTurn: boolean | null;
   isFinished: boolean;
   onEnterMatch: (m: PenaltyMatchType) => void;
   onChallenge: (pubkey: string) => void;
@@ -672,7 +672,6 @@ function IncomingMatchCard({
   const profile = useProfile(match.challenger);
   const name = profile?.name || (match.challenger.slice(0, 8) + "…");
   const picture = profile?.picture;
-  const myTurn = useMatchTurn(match, myPubkey);
 
   return (
     <div style={{
@@ -729,10 +728,10 @@ function IncomingMatchCard({
 }
 
 function OutgoingMatchCard({
-  match, myPubkey, isFinished, onEnterMatch, onCancel, onChallenge, onDismiss,
+  match, myTurn, isFinished, onEnterMatch, onCancel, onChallenge, onDismiss,
 }: {
   match: PenaltyMatchType;
-  myPubkey: string;
+  myTurn: boolean | null;
   isFinished: boolean;
   onEnterMatch: (m: PenaltyMatchType) => void;
   onCancel: (m: PenaltyMatchType) => void;
@@ -743,7 +742,6 @@ function OutgoingMatchCard({
   const profile = useProfile(match.challenged);
   const name = profile?.name || (match.challenged.slice(0, 8) + "…");
   const picture = profile?.picture;
-  const myTurn = useMatchTurn(match, myPubkey);
 
   return (
     <div style={{
@@ -811,14 +809,20 @@ function OutgoingMatchCard({
 
 export function PenaltyMatchLobby({
   identity,
+  incoming,
+  outgoing,
+  matchesLoading,
   onEnterMatch,
 }: {
   identity: Identity | null;
+  incoming: PenaltyMatchType[];
+  outgoing: PenaltyMatchType[];
+  matchesLoading: boolean;
   onEnterMatch: (match: PenaltyMatchType) => void;
 }) {
   const { t } = useLang();
   const myPubkey = identity?.pubkey ?? null;
-  const { incoming, outgoing, loading } = useOpenMatches(myPubkey);
+  const loading = matchesLoading;
   const [finishedIds] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem("figus_finished_matches") || "[]"); } catch { return []; }
   });
@@ -833,6 +837,11 @@ export function PenaltyMatchLobby({
       return next;
     });
   };
+
+  // Una sola query batch para el estado de turno de todas las partidas activas
+  const visibleMatches = [...incoming, ...outgoing].filter(m => !dismissedIds.includes(m.id));
+  const turnMap = useTurnMap(visibleMatches, myPubkey);
+
   const [challenging, setChallenging]   = useState(false);
   const [inputPk, setInputPk]           = useState("");
   const [publishing, setPublishing]     = useState(false);
@@ -1186,20 +1195,23 @@ export function PenaltyMatchLobby({
         const active   = allMatches.filter(({ m }) => !finishedIds.includes(m.id));
         const finished = allMatches.filter(({ m }) =>  finishedIds.includes(m.id));
 
-        const renderCard = ({ m, isIncoming }: { m: PenaltyMatchType; isIncoming: boolean }) =>
-          isIncoming ? (
+        const renderCard = ({ m, isIncoming }: { m: PenaltyMatchType; isIncoming: boolean }) => {
+          const isFinished = finishedIds.includes(m.id);
+          const myTurn = turnMap.get(m.id) ?? null;
+          return isIncoming ? (
             <IncomingMatchCard
-              key={m.id} match={m} myPubkey={myPubkey ?? ""} isFinished={finishedIds.includes(m.id)}
+              key={m.id} match={m} myTurn={myTurn} isFinished={isFinished}
               onEnterMatch={onEnterMatch} onChallenge={startChallenge}
-              onDismiss={finishedIds.includes(m.id) ? () => dismissMatch(m.id) : undefined}
+              onDismiss={isFinished ? () => dismissMatch(m.id) : undefined}
             />
           ) : (
             <OutgoingMatchCard
-              key={m.id} match={m} myPubkey={myPubkey ?? ""} isFinished={finishedIds.includes(m.id)}
+              key={m.id} match={m} myTurn={myTurn} isFinished={isFinished}
               onEnterMatch={onEnterMatch} onCancel={handleCancel} onChallenge={startChallenge}
-              onDismiss={finishedIds.includes(m.id) ? () => dismissMatch(m.id) : undefined}
+              onDismiss={isFinished ? () => dismissMatch(m.id) : undefined}
             />
           );
+        };
 
         return (
           <>

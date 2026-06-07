@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { EventTemplate } from "nostr-tools";
 import { useIdentity } from "@/hooks/useIdentity";
 import { useGameState } from "@/hooks/useGameState";
-import { useHasMyTurn, createMatch } from "@/hooks/usePenaltyMatch";
+import { useOpenMatches, useHasMyTurn, createMatch } from "@/hooks/usePenaltyMatch";
 import { Connect } from "@/components/Connect";
 import { Album } from "@/components/Album";
 import { Packs, PackReveal } from "@/components/Packs";
@@ -20,7 +20,7 @@ import { ISSUER_PUBKEY, KIND, ALBUM_ID, addr } from "@/lib/constants";
 import { zap } from "@/lib/zap";
 import { subscribeOne } from "@/lib/pool";
 import { signEvent } from "@/lib/identity";
-import { getPool, getRelays } from "@/lib/pool";
+import { getPool, getRelays, warmupRelays } from "@/lib/pool";
 import { getNwcString, nwcPay } from "@/lib/nwc";
 import { InvoiceModal } from "@/components/InvoiceModal";
 import { SettingsModal } from "@/components/SettingsModal";
@@ -45,7 +45,8 @@ function HomeInner() {
   const pubkey = identity?.pubkey ?? null;
   const { ownership, listings, settlements, owned, dupes, loading, refresh, hasClaimedFreePack, claimPack, addSticker } =
     useGameState(pubkey);
-  const hasPendingChallenge = useHasMyTurn(pubkey);
+  const { incoming: pmIncoming, outgoing: pmOutgoing, loading: pmLoading } = useOpenMatches(pubkey);
+  const hasPendingChallenge = useHasMyTurn(pmIncoming, pmOutgoing, pubkey);
 
   const VALID_TABS: Tab[] = ["album", "packs", "market", "fixture", "game"];
   const hashTab = (): Tab => {
@@ -59,6 +60,11 @@ function HomeInner() {
   useEffect(() => {
     window.location.hash = tab;
   }, [tab]);
+
+  // Pre-establish relay connections as soon as the user logs in
+  useEffect(() => {
+    if (pubkey) warmupRelays();
+  }, [pubkey]);
   const [toast, setToast] = useState<string | null>(null);
   const [packResult, setPackResult] = useState<number[] | null>(null);
   const [penaltyPackPending, setPenaltyPackPending] = useState(false);
@@ -813,6 +819,9 @@ function HomeInner() {
                     <div style={{ borderTop: "1px solid var(--line)", paddingTop: 24 }}>
                       <PenaltyMatchLobby
                         identity={identity}
+                        incoming={pmIncoming}
+                        outgoing={pmOutgoing}
+                        matchesLoading={pmLoading}
                         onEnterMatch={setActiveMatch}
                       />
                     </div>
