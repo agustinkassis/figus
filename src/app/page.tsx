@@ -46,7 +46,16 @@ function HomeInner() {
   const { ownership, listings, settlements, owned, dupes, loading, refresh, hasClaimedFreePack, claimPack, addSticker } =
     useGameState(pubkey);
   const { incoming: pmIncoming, outgoing: pmOutgoing, loading: pmLoading } = useOpenMatches(pubkey);
-  const hasPendingChallenge = useHasMyTurn(pmIncoming, pmOutgoing, pubkey);
+
+  // Excluir matches que el cliente ya confirmó como terminados (localStorage) —
+  // estos siguen en Nostr con status "open" pero no deben activar el punto rojo.
+  const [localFinishedIds] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("figus_finished_matches") || "[]") as string[]); }
+    catch { return new Set<string>(); }
+  });
+  const activeIncoming = pmIncoming.filter(m => !localFinishedIds.has(m.id));
+  const activeOutgoing = pmOutgoing.filter(m => !localFinishedIds.has(m.id));
+  const hasPendingChallenge = useHasMyTurn(activeIncoming, activeOutgoing, pubkey);
 
   const VALID_TABS: Tab[] = ["album", "packs", "market", "fixture", "game"];
   const hashTab = (): Tab => {
