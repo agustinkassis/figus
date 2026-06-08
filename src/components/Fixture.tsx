@@ -5,6 +5,7 @@ import { TEAMS, TEAM_GROUPS, PAGES, teamName } from "@/lib/catalog";
 import { Flag } from "./Flag";
 import { useLang } from "@/contexts/LangContext";
 import { usePronosticos } from "@/hooks/usePronosticos";
+import { BetPanel } from "./BetPanel";
 import type { Identity } from "@/lib/identity";
 
 // ─── Groups order ─────────────────────────────────────────────────────────────
@@ -365,6 +366,7 @@ function MatchRow({
       </div>
 
       <PronoFooter identity={identity} isDirty={isDirty} homeVal={homeVal} awayVal={awayVal} publishing={publishing} myProno={!!myProno} count={count} onSave={handleSave} t={t} />
+      <BetPanel home={teamA} away={teamB} nameHome={nameA} nameAway={nameB} identity={identity} t={t} />
     </div>
   );
 }

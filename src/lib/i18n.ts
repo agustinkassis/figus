@@ -150,6 +150,25 @@ const T = {
     prono_count:       "pronósticos",
     prono_simultaneous: "partidos simultáneos",
 
+    // Betting
+    bet_section:       "APUESTAS",
+    bet_open:          "Apostar",
+    bet_pick_home:     "Gana local",
+    bet_pick_draw:     "Empate",
+    bet_pick_away:     "Gana visitante",
+    bet_amount_label:  "Monto (sats)",
+    bet_create:        "CREAR APUESTA",
+    bet_accept:        "ACEPTAR",
+    bet_accept_tip:    "Aceptar = apostar al otro resultado",
+    bet_no_bets:       "Sin apuestas abietas",
+    bet_locked:        "⚡ Locked",
+    bet_matched:       "✅ Matched",
+    bet_settled:       "🏆 Liquidada",
+    bet_connect:       "Conectate para apostar",
+    bet_sats:          "sats",
+    bet_vs:            "vs",
+    bet_fee:           "2% fee al issuer",
+
     // Rarity
     rarity_common:    "Común",
     rarity_rare:      "Rara",
@@ -484,6 +503,25 @@ const T = {
     prono_connect:     "Connect to predict",
     prono_count:       "predictions",
     prono_simultaneous: "simultaneous matches",
+
+    // Betting
+    bet_section:       "BETS",
+    bet_open:          "Bet",
+    bet_pick_home:     "Home wins",
+    bet_pick_draw:     "Draw",
+    bet_pick_away:     "Away wins",
+    bet_amount_label:  "Amount (sats)",
+    bet_create:        "CREATE BET",
+    bet_accept:        "ACCEPT",
+    bet_accept_tip:    "Accept = bet on opposite outcome",
+    bet_no_bets:       "No open bets",
+    bet_locked:        "⚡ Locked",
+    bet_matched:       "✅ Matched",
+    bet_settled:       "🏆 Settled",
+    bet_connect:       "Connect to bet",
+    bet_sats:          "sats",
+    bet_vs:            "vs",
+    bet_fee:           "2% issuer fee",
 
     // Rarity
     rarity_common:    "Common",

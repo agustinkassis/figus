@@ -5,6 +5,8 @@ import { CATALOG, ALL_NUMBERS, rollSticker } from "../src/lib/catalog";
 import {
   parseMatch, parseCommit, parseBlock, parseReveal, deriveMatchState,
 } from "../src/lib/penalty";
+import { handleBetLock, loadBetState, settleBetsForMatch } from "./bets";
+import { startFootballPoller } from "./football";
 
 const KIND = {
   OWNERSHIP: 30100,
@@ -193,6 +195,8 @@ async function onReceipt(receipt: Event) {
       await handleOpenPack(req!);
     } else if (action === "buy-sticker") {
       await handleBuySticker(req!, receipt);
+    } else if (action === "bet-lock") {
+      await handleBetLock(req!, receipt);
     } else if (isToIssuer) {
       // Zap a la LN address del issuer sin action explícita → open-pack
       // (cubre providers que stripean tags custom del zap request en el description)
@@ -329,6 +333,8 @@ async function main() {
   console.log("   pubkey:", ISSUER);
   console.log("   relays:", RELAYS.join(", "));
   await resolveLnPubkey();
+  await loadBetState();
+  startFootballPoller(settleBetsForMatch);
 
   // Verificar conectividad: suscribirse a text notes para confirmar que llegan eventos
   let connOk = false;

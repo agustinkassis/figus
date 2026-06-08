@@ -17,6 +17,9 @@ export const KIND = {
   REWARD_CLAIM:   1579,  // regular · usuario · solicitud de premio por página/álbum completo
   STEAL_CLAIM:    1580,  // regular · ganador · reclama figurita robada al rival tras ganar penalty
   PRONO:          30302, // addressable · usuario · pronóstico de partido (d = "prono:{albumId}:{matchId}")
+  BET_OFFER:      30400, // addressable · apostador A · oferta de apuesta (d = bet ID)
+  BET_ACCEPT:     1591,  // regular · apostador B · acepta oferta
+  BET_SETTLE:     1592,  // regular · issuer · liquidación (pago confirmado)
   ZAP_REQUEST: 9734, // NIP-57
   ZAP_RECEIPT: 9735, // NIP-57
 } as const;
@@ -24,6 +27,7 @@ export const KIND = {
 export const ALBUM_ID = process.env.NEXT_PUBLIC_ALBUM_ID || "mundial-2026";
 
 export const ISSUER_PUBKEY = process.env.NEXT_PUBLIC_ISSUER_PUBKEY || "";
+export const ISSUER_LN_ADDRESS = process.env.NEXT_PUBLIC_ISSUER_LN_ADDRESS || "";
 
 export const RELAYS = (process.env.NEXT_PUBLIC_RELAYS ||
   "wss://relay.damus.io,wss://nos.lol,wss://relay.nostr.band,wss://relay.primal.net,wss://nostr.mom")
