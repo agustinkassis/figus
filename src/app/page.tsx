@@ -1083,12 +1083,98 @@ function LandingPage({
         }}>
           {t.landing_how_it_works}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
           <FeatureCard icon="📖" color="#e8b923" title={t.landing_album_title} desc={t.landing_album_desc} />
           <FeatureCard icon="⚡" color="#f5d060" title={t.landing_packs_title} desc={t.landing_packs_desc} />
           <FeatureCard icon="🏷️" color="#52b788" title={t.landing_market_title} desc={t.landing_market_desc} />
           <FeatureCard icon="⚽" color="#6cc4ee" title={t.landing_game_title} desc={t.landing_game_desc} />
+          <FeatureCard icon="🃏" color="#f87171" title={t.landing_steal_title} desc={t.landing_steal_desc} />
+          <FeatureCard icon="🎰" color="#a78bfa" title={t.landing_bets_title} desc={t.landing_bets_desc} />
         </div>
+      </section>
+
+      {/* ── PREMIOS ── */}
+      <section style={{ marginBottom: 60 }}>
+        <div style={{
+          fontFamily: "var(--condensed)",
+          fontSize: 10,
+          letterSpacing: 3,
+          color: "var(--muted)",
+          textAlign: "center",
+          marginBottom: 24,
+          fontWeight: 900,
+        }}>
+          {t.landing_prizes_label}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
+          {/* Equipo */}
+          <div style={{
+            background: "linear-gradient(135deg, rgba(232,185,35,.1), rgba(232,185,35,.03))",
+            border: "1px solid rgba(232,185,35,.35)",
+            borderRadius: 16,
+            padding: "28px 20px",
+            textAlign: "center",
+          }}>
+            <div style={{ fontSize: 36, marginBottom: 10 }}>🏅</div>
+            <div style={{
+              fontFamily: "var(--condensed)",
+              fontWeight: 900,
+              fontSize: 13,
+              color: "var(--ink)",
+              letterSpacing: 0.5,
+              marginBottom: 8,
+            }}>
+              {t.landing_prizes_team}
+            </div>
+            <div style={{
+              fontFamily: "var(--display)",
+              fontSize: 28,
+              color: "var(--gold)",
+              lineHeight: 1,
+              marginBottom: 4,
+            }}>
+              {t.landing_prizes_team_sats}
+            </div>
+          </div>
+          {/* Álbum */}
+          <div style={{
+            background: "linear-gradient(135deg, rgba(232,185,35,.16), rgba(232,185,35,.05))",
+            border: "1px solid rgba(232,185,35,.55)",
+            borderRadius: 16,
+            padding: "28px 20px",
+            textAlign: "center",
+          }}>
+            <div style={{ fontSize: 36, marginBottom: 10 }}>🏆</div>
+            <div style={{
+              fontFamily: "var(--condensed)",
+              fontWeight: 900,
+              fontSize: 13,
+              color: "var(--ink)",
+              letterSpacing: 0.5,
+              marginBottom: 8,
+            }}>
+              {t.landing_prizes_album}
+            </div>
+            <div style={{
+              fontFamily: "var(--display)",
+              fontSize: 28,
+              color: "var(--gold)",
+              lineHeight: 1,
+              marginBottom: 4,
+            }}>
+              {t.landing_prizes_album_sats}
+            </div>
+          </div>
+        </div>
+        <p style={{
+          textAlign: "center",
+          fontSize: 11,
+          color: "var(--muted)",
+          fontFamily: "var(--condensed)",
+          marginTop: 14,
+        }}>
+          {t.landing_prizes_note}
+        </p>
       </section>
 
       {/* ── DEMO DE SOBRES ── */}

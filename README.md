@@ -11,16 +11,29 @@
 - **Mercado P2P** — listá y comprá figuritas repetidas directamente entre usuarios, liquidado por zap.
 - **Fixture** — calendario completo del Mundial 2026: fase de grupos (MD1–MD3) y eliminatorias (Ronda de 32 → Gran Final) con horarios en UTC y hora Argentina.
 - **Pronósticos** — predecí resultados de cada partido; los pronós se publican como eventos Nostr (kind 30302) y se actualizan automáticamente.
-- **Penales** — minijuego de penales. Ganás un sobre gratis. También podés desafiar a otros usuarios a tandas de penales y robarles figuritas.
+- **Penales 3D** — minijuego de penales con cancha WebGL. Si convertís, ganás un sobre gratis.
+- **Penales P2P** — desafiá a otros usuarios a tandas de penales. **El ganador le roba una figurita aleatoria al perdedor** — el resultado queda grabado en Nostr.
+- **Apuestas P2P** — apostá sats en el resultado de cualquier partido (gana local / empate / gana visitante). El issuer detecta automáticamente el resultado vía football-data.org y paga al ganador vía Lightning. Fee del 2%.
+- **Premios en sats** — completá la página de un equipo y recibís **210 sats**; completá el álbum entero y recibís **5.000 sats**. Pagados automáticamente por el issuer vía NWC.
 - **Compartir en Nostr** — publicá tus figuritas brillantes como notas kind:1 con la imagen del card adjunta (subida a nostr.build).
 - **Multi-idioma** — español e inglés.
 - **Multi-firmante** — NIP-07 (extensión), NIP-46 (Nostr Connect / bunker), clave local (nsec) o generación de clave nueva.
+
+## Premios
+
+| Logro | Premio |
+|---|---|
+| Completar la página de un equipo (todas sus figuritas) | ⚡ 210 sats |
+| Completar el álbum entero (672 figuritas únicas) | ⚡ 5.000 sats |
+| Ganar una tanda de penales P2P | Robar una figurita aleatoria del rival |
+| Ganar una apuesta P2P en resultado de partido | El bote de la apuesta menos 2% de fee |
 
 ## Requisitos
 
 - Node.js 18+
 - Una Lightning Address para el issuer (Alby, Wallet of Satoshi, etc.)
 - Opcionalmente: una wallet NWC para pagos automáticos de recompensas
+- Opcionalmente: API key de [football-data.org](https://www.football-data.org/) para detección automática de resultados (apuestas)
 
 ## Puesta en marcha
 
@@ -52,7 +65,7 @@ npm run seed
 
 ### 3. Levantar el issuer
 
-Escucha zap receipts (NIP-57) y emite grants de ownership, settlements de trades y pagos de recompensas vía NWC:
+Escucha zap receipts (NIP-57), emite grants de ownership, settlements de trades, pagos de recompensas vía NWC, y liquida apuestas automáticamente cuando terminan los partidos:
 
 ```bash
 npm run issuer
@@ -72,10 +85,11 @@ npm run dev
 | `NEXT_PUBLIC_ALBUM_ID` | Slug único del álbum en Nostr (d tag) | Sí |
 | `NEXT_PUBLIC_ISSUER_PUBKEY` | Pubkey hex del issuer | Sí |
 | `ISSUER_NSEC` | Clave privada del issuer (solo servidor) | Sí |
-| `NEXT_PUBLIC_ISSUER_LN_ADDRESS` | Lightning address del issuer | Sí |
-| `REWARD_NWC` | Nostr Wallet Connect del issuer para pagar recompensas | No |
-| `REWARD_PAGE_SATS` | Sats por completar una página de equipo | No |
-| `REWARD_ALBUM_SATS` | Sats por completar el álbum entero | No |
+| `NEXT_PUBLIC_ISSUER_LN_ADDRESS` | Lightning address del issuer (destino de zaps) | Sí |
+| `REWARD_NWC` | Nostr Wallet Connect del issuer para pagar recompensas y apuestas | No |
+| `REWARD_PAGE_SATS` | Sats por completar una página de equipo (default: 210) | No |
+| `REWARD_ALBUM_SATS` | Sats por completar el álbum entero (default: 5000) | No |
+| `FOOTBALL_API_KEY` | API key de football-data.org para detección automática de resultados | No |
 | `NEXT_PUBLIC_RELAYS` | Lista de relays separada por comas | No |
 | `NEXT_PUBLIC_SITE_URL` | URL pública del deploy (para links en notas compartidas) | No |
 
@@ -91,7 +105,8 @@ src/
     Album.tsx           # grilla del álbum con zoom de sticker
     Packs.tsx           # apertura de sobres + reveal animado
     Market.tsx          # mercado P2P (listings, compra, mis ventas)
-    Fixture.tsx         # fixture completo: fase de grupos + eliminatorias + pronósticos
+    Fixture.tsx         # fixture completo: fase de grupos + eliminatorias + pronósticos + apuestas
+    BetPanel.tsx        # panel de apuestas P2P por partido
     PenaltyGame.tsx     # minijuego de penales (client-side)
     PenaltyMatch.tsx    # desafíos P2P de penales entre usuarios
     PenaltyScene3D.tsx  # escena 3D con Three.js / React Three Fiber
@@ -110,25 +125,29 @@ src/
     useGameState.ts     # estado completo del juego desde relays
     usePenaltyMatch.ts  # lobby + partidas de penales P2P
     usePronosticos.ts   # pronósticos de partidos (kind 30302)
+    useBets.ts          # apuestas P2P por partido (kind 30400 + 1592)
     useLeaderboard.ts   # ranking de jugadores
     useProfile.ts       # perfil Nostr de un pubkey
     useTraders.ts       # historial de intercambios
   lib/
-    constants.ts        # kinds de eventos, relays, ALBUM_ID
-    catalog.ts          # catálogo de 1000 figuritas, rarezas, sorteo
+    constants.ts        # kinds de eventos, relays, ALBUM_ID, ISSUER_LN_ADDRESS
+    catalog.ts          # catálogo de figuritas, rarezas, sorteo
     identity.ts         # firmado (NIP-07 / NIP-46 / local) + sesión
     share.ts            # captura DOM con html2canvas, upload a nostr.build
     zap.ts              # flujo NIP-57 (zap request → invoice → receipt)
-    nwc.ts              # Nostr Wallet Connect (pagos automáticos)
+    nwc.ts              # Nostr Wallet Connect (pagos automáticos, cliente)
+    nwc-server.ts       # Nostr Wallet Connect (pagos automáticos, servidor/issuer)
     penalty.ts          # lógica de partidas de penales P2P
     pool.ts             # capa de relays (nostr-tools SimplePool)
     parsers.ts          # eventos Nostr → tipos del dominio
     i18n.ts             # strings en español e inglés
     types.ts            # tipos del dominio
 issuer/
-  index.ts              # listener de zap receipts — emite grants y settlements
+  index.ts              # listener de zap receipts + resultados de fútbol → grants, settlements, apuestas
+  bets.ts               # lógica de apuestas P2P: lock, match, settle
+  football.ts           # cliente de football-data.org + polling de resultados
   seed.ts               # genera claves + publica catálogo en relays
-  lib.ts                # helpers del issuer
+  lib.ts                # helpers del issuer (pool, publish, sign)
 docs/
   figus-modelo-datos-nostr.md  # esquemas de todos los eventos Nostr
 ```
@@ -138,15 +157,29 @@ docs/
 | Kind | Nombre | Descripción |
 |---|---|---|
 | 1 | Note | Posts compartidos (figuritas, ganancias en penales) |
+| 1573 | Grant | Figus entregadas al abrir un sobre (emitido por issuer) |
+| 1574 | Settlement | Liquidación de un trade o apuesta (emitido por issuer) |
 | 1575 | Claim | El cliente solicita un sobre o recompensa al issuer |
+| 1576 | Penalty Commit | Compromiso de zona del pateador (hash) |
+| 1577 | Penalty Block | Elección de columna del arquero |
+| 1578 | Penalty Reveal | Revelación de zona + nonce del pateador |
 | 1580 | Steal Claim | Reclamo de figurita ganada en penales |
-| 9734 | Zap Request | Solicitud de pago para compra de sobre |
-| 9735 | Zap Receipt | Confirmación de pago — dispara grants |
+| 1591 | Bet Accept | Apostador B acepta una oferta de apuesta |
+| 1592 | Bet Settle | Estado de apuesta publicado por el issuer (locked / matched / settled) |
+| 9734 | Zap Request | Solicitud de pago para compra de sobre o apuesta |
+| 9735 | Zap Receipt | Confirmación de pago — dispara grants o bet-lock |
 | 30100 | Ownership | Figurita en posesión de un usuario (emitido por issuer) |
 | 30200 | Listing | Figurita listada en el mercado P2P |
-| 30201 | Settlement | Liquidación de un trade (emitido por issuer) |
-| 30300 | Penalty Match | Estado de una partida de penales P2P |
+| 30301 | Penalty Match | Partida de penales P2P |
 | 30302 | Pronóstico | Predicción de resultado de un partido (por usuario) |
+| 30400 | Bet Offer | Oferta de apuesta P2P por resultado de partido |
+
+## Flujo de apuestas P2P
+
+1. **Apostador A** crea una oferta en el fixture: elige partido, resultado (local/empate/visitante) y monto en sats.
+2. **Apostador A** paga vía zap al issuer con `figus-action: "bet-lock"` — el issuer publica una confirmación en Nostr.
+3. **Apostador B** ve la oferta abierta, la acepta pagando el mismo monto vía zap — la apuesta queda "matched".
+4. Cuando termina el partido, el issuer consulta football-data.org (polling cada 5 min), determina el resultado y paga automáticamente al ganador vía Lightning. El fee es del 2% del bote total.
 
 ## Login
 
@@ -162,7 +195,8 @@ Cuatro métodos soportados:
 ## Arquitectura
 
 - **Sin base de datos** — todo el estado del juego se deriva de eventos Nostr en relays públicos.
-- **Issuer trustless** — solo actúa ante un zap receipt `9735` válido firmado por la wallet del usuario. Nunca custodia fondos.
+- **Issuer trustless** — solo actúa ante un zap receipt `9735` válido firmado por la wallet del usuario. Nunca custodia fondos más del tiempo de matching de apuestas.
+- **Resultados automáticos** — el issuer hace polling a football-data.org cada 5 minutos durante el Mundial y liquida apuestas automáticamente sin intervención manual.
 - **Imágenes de figuritas** — subidas a [nostr.build](https://nostr.build) en el momento de compartir (gratis, sin auth). Se adjuntan al note con tag NIP-92 `imeta`.
 - **Pronósticos descentralizados** — cada usuario publica sus predicciones como eventos kind 30302 reemplazables. Sin servidor.
 - **Persistencia de tab** — la URL usa el hash (`#fixture`, `#album`, etc.) para recordar la sección activa al refrescar.
