@@ -365,6 +365,28 @@ async function main() {
     { onevent: onReceipt }
   );
 
+  // Recuperar bet-lock receipts de los últimos 30 min que pudo haberse perdido
+  // durante un reinicio. El estado de la apuesta (sideAPaid) previene duplicados.
+  (async () => {
+    const recoverSince = now() - 30 * 60;
+    const recentReceipts = await pool.querySync(
+      RELAYS,
+      { kinds: [KIND.ZAP_RECEIPT], since: recoverSince },
+      { maxWait: 6000 }
+    );
+    let recovered = 0;
+    for (const ev of recentReceipts) {
+      const req = extractZapRequest(ev);
+      if (!req) continue;
+      const action = tag(req, "figus-action");
+      if (action === "bet-lock") {
+        await onReceipt(ev); // seen-set dedup + sideAPaid check en handleBetLock
+        recovered++;
+      }
+    }
+    if (recovered > 0) console.log(`   ✅ Recuperados ${recovered} bet-lock receipt(s) perdidos`);
+  })().catch(console.error);
+
   console.log("   Escuchando steal claims (kind 1580)…");
   pool.subscribeMany(
     RELAYS,

@@ -131,7 +131,8 @@ function BetRow({
   const status = settle?.action;
   const isOwn = identity?.pubkey === offer.author;
   const aLocked = status === "bet-locked-a";
-  const canAccept = !isOwn && identity && aLocked; // solo aceptar cuando sideA ya pagó
+  // Mostrar botón para no-dueños si: bet-locked-a confirmado, o sin estado (issuer pudo perder el receipt)
+  const canAccept = !isOwn && identity && (aLocked || !status);
 
   // Cerrar factura automáticamente cuando el issuer confirma bet-matched
   useEffect(() => {
