@@ -7,6 +7,7 @@ import {
   useBets,
   createBetAndLock,
   acceptBetAndLock,
+  cancelBet,
   type BetOffer,
   type BetPick,
 } from "@/hooks/useBets";
@@ -133,6 +134,8 @@ function BetRow({
   const aLocked = status === "bet-locked-a";
   // Mostrar botón para no-dueños si: bet-locked-a confirmado, o sin estado (issuer pudo perder el receipt)
   const canAccept = !isOwn && identity && (aLocked || !status);
+  // Solo el dueño puede cancelar cuando está en bet-locked-a (esperando sideB)
+  const canCancel = isOwn && identity && aLocked;
 
   // Cerrar factura automáticamente cuando el issuer confirma bet-matched
   useEffect(() => {
@@ -141,6 +144,20 @@ function BetRow({
       setNotify("✅ ¡Apuesta confirmada!");
     }
   }, [status, invoice]);
+
+  const handleCancel = async () => {
+    if (!identity) return;
+    setBusy(true);
+    setNotify(null);
+    try {
+      await cancelBet(identity, offer);
+      setNotify("⏳ Cancelación enviada — esperando reembolso");
+    } catch (e: any) {
+      setNotify("⚠️ " + e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const handleAccept = async () => {
     if (!identity) return;
@@ -228,6 +245,27 @@ function BetRow({
             }}
           >
             {busy ? "…" : t.bet_accept}
+          </button>
+        )}
+        {canCancel && (
+          <button
+            onClick={handleCancel}
+            disabled={busy}
+            style={{
+              background: "transparent",
+              color: "var(--muted)",
+              border: "1px solid var(--line)",
+              borderRadius: 6,
+              padding: "4px 10px",
+              fontFamily: "var(--condensed)",
+              fontWeight: 900,
+              fontSize: 10,
+              cursor: busy ? "default" : "pointer",
+              opacity: busy ? 0.6 : 1,
+              flexShrink: 0,
+            }}
+          >
+            {busy ? "…" : t.bet_cancel}
           </button>
         )}
       </div>

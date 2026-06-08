@@ -24,7 +24,7 @@ export interface BetOffer {
 export interface BetSettle {
   id: string;
   betId: string;
-  action: "bet-locked-a" | "bet-matched" | "bet-settled";
+  action: "bet-locked-a" | "bet-matched" | "bet-settled" | "bet-cancelled";
   winner?: string;
   sideB?: string;
   amount?: number;
@@ -79,11 +79,12 @@ export function useBets(home: string, away: string) {
       .filter((o): o is BetOffer => o !== null && o.home === home && o.away === away)
       .sort((a, b) => b.createdAt - a.createdAt);
 
-    // Build latest settle per betId (prefer "bet-settled" > "bet-matched" > "bet-locked-a")
+    // Build latest settle per betId (higher priority = more final state)
     const PRIORITY: Record<string, number> = {
-      "bet-settled": 3,
-      "bet-matched": 2,
-      "bet-locked-a": 1,
+      "bet-settled":   3,
+      "bet-cancelled": 3,
+      "bet-matched":   2,
+      "bet-locked-a":  1,
     };
     const settleMap = new Map<string, BetSettle>();
     for (const ev of settleEvs) {
@@ -180,4 +181,24 @@ export async function acceptBetAndLock(
     signerMode: identity.mode,
   });
   return { invoice: result.invoice, paid: result.paid };
+}
+
+// Cancela una apuesta en estado bet-locked-a (sideA pide reembolso menos fee)
+export async function cancelBet(
+  identity: Identity,
+  offer: BetOffer,
+): Promise<void> {
+  const { getPool, getRelays } = await import("@/lib/pool");
+  const tmpl: EventTemplate = {
+    kind: KIND.BET_CANCEL,
+    created_at: Math.floor(Date.now() / 1000),
+    content: "",
+    tags: [
+      ["figus-action", "bet-cancel"],
+      ["bet", offer.betId],
+      ["a", `${KIND.BET_OFFER}:${offer.author}:${offer.betId}`],
+    ],
+  };
+  const signed = await signEvent(tmpl, identity.mode);
+  await Promise.any(getPool().publish(getRelays(), signed));
 }

@@ -5,7 +5,7 @@ import { CATALOG, ALL_NUMBERS, rollSticker } from "../src/lib/catalog";
 import {
   parseMatch, parseCommit, parseBlock, parseReveal, deriveMatchState,
 } from "../src/lib/penalty";
-import { handleBetLock, loadBetState, settleBetsForMatch } from "./bets";
+import { handleBetLock, handleBetCancel, loadBetState, settleBetsForMatch } from "./bets";
 import { startFootballPoller } from "./football";
 
 const KIND = {
@@ -19,6 +19,7 @@ const KIND = {
   PENALTY_BLOCK:  1577,
   PENALTY_REVEAL: 1578,
   STEAL_CLAIM:    1580,
+  BET_CANCEL:     1593,
 };
 
 const ISSUER = issuerPubkey();
@@ -392,6 +393,13 @@ async function main() {
     RELAYS,
     { kinds: [KIND.STEAL_CLAIM], since: now() - 300 },
     { onevent: (ev) => handleStealClaim(ev).catch(console.error) }
+  );
+
+  console.log("   Escuchando bet cancels (kind 1593)…");
+  pool.subscribeMany(
+    RELAYS,
+    { kinds: [KIND.BET_CANCEL], since: now() - 300 },
+    { onevent: (ev) => handleBetCancel(ev).catch(console.error) }
   );
 }
 

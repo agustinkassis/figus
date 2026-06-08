@@ -20,6 +20,7 @@ export const KIND = {
   BET_OFFER:      30400, // addressable · apostador A · oferta de apuesta (d = bet ID)
   BET_ACCEPT:     1591,  // regular · apostador B · acepta oferta
   BET_SETTLE:     1592,  // regular · issuer · liquidación (pago confirmado)
+  BET_CANCEL:     1593,  // regular · apostador A · solicitud de cancelación
   ZAP_REQUEST: 9734, // NIP-57
   ZAP_RECEIPT: 9735, // NIP-57
 } as const;

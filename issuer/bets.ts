@@ -211,6 +211,80 @@ async function payLnAddress(lnAddress: string, sats: number): Promise<void> {
   await nwcPayServer(pr, nwcStr);
 }
 
+// Cancela una apuesta en estado bet-locked-a; devuelve sats a sideA menos el fee.
+export async function handleBetCancel(ev: Event): Promise<void> {
+  const betId = tag(ev, "bet");
+  const requester = ev.pubkey;
+  if (!betId) return console.log("   bet-cancel sin tag 'bet'");
+
+  if (settledBets.has(betId)) {
+    return console.log(`   bet-cancel: bet ${betId} ya liquidada/cancelada, ignorando`);
+  }
+
+  let state = bets.get(betId);
+  if (!state) {
+    const offers = await listOnce([{ kinds: [KIND_BET_OFFER], "#d": [betId] }]);
+    const offer = offers.sort((a, b) => b.created_at - a.created_at)[0];
+    if (!offer) return console.log(`   bet-cancel: BET_OFFER ${betId} no encontrado`);
+    state = {
+      offerCoord: `${KIND_BET_OFFER}:${offer.pubkey}:${betId}`,
+      sideA: offer.pubkey,
+      sideB: null,
+      amount: Number(tag(offer, "amount") ?? "0"),
+      home: tag(offer, "home") ?? "",
+      away: tag(offer, "away") ?? "",
+      pick: (tag(offer, "pick") ?? "home") as "home" | "draw" | "away",
+      sideAPaid: false, sideBPaid: false,
+    };
+    bets.set(betId, state);
+  }
+
+  if (requester !== state.sideA) {
+    return console.log(`   bet-cancel: solo sideA puede cancelar (${requester.slice(0, 8)}… no es ${state.sideA.slice(0, 8)}…)`);
+  }
+  if (!state.sideAPaid) {
+    return console.log(`   bet-cancel: sideA aún no pagó para ${betId}`);
+  }
+  if (state.sideBPaid) {
+    return console.log(`   bet-cancel: apuesta ya matcheada, no se puede cancelar ${betId}`);
+  }
+
+  const fee = Math.floor(state.amount * FEE_RATE);
+  const refund = state.amount - fee;
+  console.log(`❌ Cancelando bet ${betId}: devolviendo ${refund} sats a sideA (fee ${fee} sats)`);
+
+  settledBets.add(betId);
+
+  const baseTags = [
+    ["figus-action", "bet-cancelled"],
+    ["bet", betId],
+    ["a", state.offerCoord],
+    ["p", state.sideA],
+    ["sideA", state.sideA],
+    ["amount", String(refund)],
+    ["fee", String(fee)],
+    ["home", state.home],
+    ["away", state.away],
+    ["pick", state.pick],
+  ];
+
+  const lud16 = await getLud16(state.sideA);
+  if (!lud16) {
+    console.log(`⚠️ sideA ${state.sideA.slice(0, 8)}… sin lud16 — marcando pendiente`);
+    await publish({ kind: KIND_BET_SETTLE, created_at: now(), content: "", tags: [...baseTags, ["status", "pending-lnaddr"]] });
+    return;
+  }
+
+  try {
+    await payLnAddress(lud16, refund);
+    await publish({ kind: KIND_BET_SETTLE, created_at: now(), content: "", tags: [...baseTags, ["status", "paid"], ["lud16", lud16]] });
+    console.log(`💸 Reembolso ${refund} sats a ${lud16} — bet ${betId} cancelada ✓`);
+  } catch (e: any) {
+    settledBets.delete(betId); // permitir reintento
+    console.error(`❌ Error reembolsando bet ${betId}:`, e.message);
+  }
+}
+
 // Liquida todas las apuestas matched para un partido que terminó.
 export async function settleBetsForMatch(match: ApiMatch): Promise<void> {
   const { homeTeam, awayTeam, score } = match;
