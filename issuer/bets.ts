@@ -242,11 +242,31 @@ export async function handleBetCancel(ev: Event): Promise<void> {
   if (requester !== state.sideA) {
     return console.log(`   bet-cancel: solo sideA puede cancelar (${requester.slice(0, 8)}… no es ${state.sideA.slice(0, 8)}…)`);
   }
-  if (!state.sideAPaid) {
-    return console.log(`   bet-cancel: sideA aún no pagó para ${betId}`);
-  }
   if (state.sideBPaid) {
     return console.log(`   bet-cancel: apuesta ya matcheada, no se puede cancelar ${betId}`);
+  }
+
+  // Si sideA nunca pagó (bet bugeada / pago procesado como otra cosa), solo marcar cancelada sin reembolso
+  if (!state.sideAPaid) {
+    console.log(`   bet-cancel: sideA sin pago registrado, cancelando sin reembolso ${betId}`);
+    settledBets.add(betId);
+    await publish({
+      kind: KIND_BET_SETTLE, created_at: now(), content: "",
+      tags: [
+        ["figus-action", "bet-cancelled"],
+        ["bet", betId],
+        ["a", state.offerCoord],
+        ["p", state.sideA],
+        ["sideA", state.sideA],
+        ["amount", "0"],
+        ["fee", "0"],
+        ["home", state.home],
+        ["away", state.away],
+        ["pick", state.pick],
+        ["status", "no-payment"],
+      ],
+    });
+    return;
   }
 
   const fee = Math.floor(state.amount * FEE_RATE);

@@ -134,8 +134,8 @@ function BetRow({
   const aLocked = status === "bet-locked-a";
   // Mostrar botón para no-dueños si: bet-locked-a confirmado, o sin estado (issuer pudo perder el receipt)
   const canAccept = !isOwn && identity && (aLocked || !status);
-  // Solo el dueño puede cancelar cuando está en bet-locked-a (esperando sideB)
-  const canCancel = isOwn && identity && aLocked;
+  // Dueño puede cancelar si está locked-a (con reembolso) o si no tiene estado (bet bugeada, limpieza)
+  const canCancel = isOwn && identity && (aLocked || !status);
 
   // Cerrar factura automáticamente cuando el issuer confirma bet-matched
   useEffect(() => {
