@@ -29,7 +29,7 @@ export function BetPanel({ home, away, nameHome, nameAway, identity, t }: Props)
 
   const openBets = offers.filter((o) => {
     const s = settles.get(o.betId);
-    return !s || s.action === "bet-locked-a";
+    return !s || s.action === "bet-locked-a" || s.action === "bet-matched";
   });
 
   const badge = openBets.length > 0 ? ` (${openBets.length})` : "";
