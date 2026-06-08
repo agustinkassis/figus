@@ -290,9 +290,16 @@ export function deriveMatchState(
             : null;
 
           if (!reveal) {
-            if (!commit) { phase = "waiting_commit"; currentRound = curR; }
-            else if (!block) { phase = "waiting_block"; currentRound = curR; }
-            else { phase = "waiting_reveal"; currentRound = curR; }
+            if (!commit) {
+              phase = "waiting_commit"; currentRound = curR;
+              roundStates.push({ number: curR, kicker, goalkeeper, commit: null, block: null, reveal: null, result: null });
+            } else if (!block) {
+              phase = "waiting_block"; currentRound = curR;
+              roundStates.push({ number: curR, kicker, goalkeeper, commit, block: null, reveal: null, result: null });
+            } else {
+              phase = "waiting_reveal"; currentRound = curR;
+              roundStates.push({ number: curR, kicker, goalkeeper, commit, block, reveal: null, result: null });
+            }
             break outer;
           }
 
