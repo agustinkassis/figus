@@ -109,8 +109,8 @@ export async function handleBetLock(req: Event, receipt: Event): Promise<void> {
     bets.set(betId, state);
   }
 
-  // Validar monto mínimo
-  const amountMsats = Number(tag(receipt, "amount") ?? "0");
+  // El monto está en el zap request (tag "amount" en msats), no en el receipt
+  const amountMsats = Number(tag(req, "amount") ?? tag(receipt, "amount") ?? "0");
   const amountSats = Math.floor(amountMsats / 1000);
   if (amountSats < state.amount) {
     return console.log(`   bet-lock: pago insuficiente ${amountSats} < ${state.amount} sats`);

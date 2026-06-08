@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { Identity } from "@/lib/identity";
 import { ISSUER_PUBKEY, ISSUER_LN_ADDRESS } from "@/lib/constants";
 import {
@@ -130,9 +130,16 @@ function BetRow({
 
   const status = settle?.action;
   const isOwn = identity?.pubkey === offer.author;
-  const canAccept = !isOwn && !status; // sin settle → sideA aún no pagó, no aceptar
   const aLocked = status === "bet-locked-a";
-  const canAcceptAfterLock = !isOwn && aLocked;
+  const canAccept = !isOwn && identity && aLocked; // solo aceptar cuando sideA ya pagó
+
+  // Cerrar factura automáticamente cuando el issuer confirma bet-matched
+  useEffect(() => {
+    if (invoice && status === "bet-matched") {
+      setInvoice(null);
+      setNotify("✅ ¡Apuesta confirmada!");
+    }
+  }, [status, invoice]);
 
   const handleAccept = async () => {
     if (!identity) return;
@@ -154,8 +161,7 @@ function BetRow({
   const statusBadge =
     status === "bet-settled" ? t.bet_settled :
     status === "bet-matched" ? t.bet_matched :
-    status === "bet-locked-a" ? t.bet_locked :
-    null;
+    null; // "bet-locked-a" no muestra badge solo — muestra badge + botón aceptar
 
   return (
     <>
@@ -191,12 +197,18 @@ function BetRow({
         </div>
 
         {statusBadge && (
-          <span style={{ fontFamily: "var(--condensed)", fontSize: 9, fontWeight: 900, color: status === "bet-settled" ? "#4ade80" : status === "bet-matched" ? "#60a5fa" : "var(--gold)" }}>
+          <span style={{ fontFamily: "var(--condensed)", fontSize: 9, fontWeight: 900, color: status === "bet-settled" ? "#4ade80" : "#60a5fa" }}>
             {statusBadge}
           </span>
         )}
 
-        {(canAccept || canAcceptAfterLock) && identity && !statusBadge && (
+        {/* "bet-locked-a": muestra badge + botón de aceptar para sideB */}
+        {aLocked && (
+          <span style={{ fontFamily: "var(--condensed)", fontSize: 9, fontWeight: 900, color: "var(--gold)" }}>
+            {t.bet_locked}
+          </span>
+        )}
+        {canAccept && (
           <button
             onClick={handleAccept}
             disabled={busy}

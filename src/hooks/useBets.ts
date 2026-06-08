@@ -144,9 +144,6 @@ export async function createBetAndLock(
       ["expires", String(ts + 7 * 24 * 3600)], // 7 días
     ],
   };
-  await signEvent(offerTmpl, identity.mode); // sign + publish handled by caller or do it here
-
-  // Actually we need to publish too — use the pool
   const { getPool, getRelays } = await import("@/lib/pool");
   const signedOffer = await signEvent(offerTmpl, identity.mode);
   await Promise.any(getPool().publish(getRelays(), signedOffer));
