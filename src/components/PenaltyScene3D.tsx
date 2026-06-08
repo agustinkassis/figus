@@ -36,13 +36,13 @@ const ANIM_CLIPS = [
 const ANIM_PATHS = ANIM_CLIPS.map(a => a.path);
 
 // Random animation based on keeper's guess column (not ball zone).
-// col 0/2 are in PLAYER space; keeper faces the player so left↔right are mirrored.
-// keeperCol=0 (player's left)  → keeper dives to THEIR right → "derecha" animation
-// keeperCol=2 (player's right) → keeper dives to THEIR left  → "izquierda" animation
+// col 0/2 are in PLAYER space. Keeper rotation=[0,0,0] so animations are NOT mirrored:
+// keeperCol=0 (player's left)  → keeper dives to player's left  → "izquierda" animation
+// keeperCol=2 (player's right) → keeper dives to player's right → "derecha" animation
 function keeperColToClip(col: number): string {
   const r = Math.random();
-  if (col === 0) return r < 0.55 ? "derecha"   : "arriba-derecha";
-  if (col === 2) return r < 0.55 ? "izquierda" : "arriba-izquierda";
+  if (col === 0) return r < 0.55 ? "izquierda" : "arriba-izquierda";
+  if (col === 2) return r < 0.55 ? "derecha"   : "arriba-derecha";
   // center column: mix of medio, arriba, abajo
   if (r < 0.45) return "medio";
   if (r < 0.75) return "arriba";
