@@ -52,14 +52,16 @@ export function subscribe(
   return () => closers.forEach((c) => c());
 }
 
+const SEARCH_RELAYS = ["wss://relay.nostr.band", "wss://noswhere.com"];
+
 // Search query usando un pool temporal para no contaminar el pool principal
 // con relays de búsqueda que pueden ser lentos o inestables.
-export async function searchProfiles(relays: string[], searchTerm: string, limit = 8): Promise<Event[]> {
+export async function searchProfiles(searchTerm: string, limit = 8): Promise<Event[]> {
   const searchPool = new SimplePool();
   try {
-    return await searchPool.querySync(relays, { kinds: [0], search: searchTerm, limit }, { maxWait: 4000 });
+    return await searchPool.querySync(SEARCH_RELAYS, { kinds: [0], search: searchTerm, limit }, { maxWait: 3500 });
   } finally {
-    searchPool.close(relays);
+    searchPool.close(SEARCH_RELAYS);
   }
 }
 

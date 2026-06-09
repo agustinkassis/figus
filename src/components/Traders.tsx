@@ -59,10 +59,7 @@ export function Traders({
     setLoadingSuggestions(true);
     const timer = setTimeout(async () => {
       try {
-        const evs = await searchProfiles(
-          ["wss://relay.nostr.band", "wss://search.nos.today"],
-          searchTerm
-        );
+        const evs = await searchProfiles(searchTerm);
         const seen = new Set<string>();
         const results = evs.flatMap(ev => {
           if (seen.has(ev.pubkey)) return [];

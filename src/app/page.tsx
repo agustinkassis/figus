@@ -65,10 +65,14 @@ function HomeInner() {
     return VALID_TABS.includes(h) ? h : "album";
   };
   const [tab, setTab] = useState<Tab>(hashTab);
+  // Render-once-then-hide: una tab se monta la primera vez que se visita
+  // y queda montada (con display:none) para no perder estado ni suscripciones.
+  const [visitedTabs, setVisitedTabs] = useState<Set<Tab>>(() => new Set([hashTab()]));
 
   // Keep URL hash in sync with active tab
   useEffect(() => {
     window.location.hash = tab;
+    setVisitedTabs(prev => { prev.add(tab); return new Set(prev); });
   }, [tab]);
 
   // Pre-establish relay connections as soon as the user logs in
@@ -783,19 +787,21 @@ function HomeInner() {
             {loading && configured && (
               <p style={{ opacity: 0.5, textAlign: "center" }}>{t.loading}</p>
             )}
-            {tab === "album" && (
-              <Album
-                ownership={ownership}
-                onClaim={claimPage}
-                onClaimAlbum={claimAlbum}
-                onSell={listForSale}
-                claimedPages={claimedPages}
-                myListings={listings.filter(l => l.seller === pubkey)}
-                identity={identity ?? undefined}
-              />
+            {visitedTabs.has("album") && (
+              <div style={{ display: tab === "album" ? undefined : "none" }}>
+                <Album
+                  ownership={ownership}
+                  onClaim={claimPage}
+                  onClaimAlbum={claimAlbum}
+                  onSell={listForSale}
+                  claimedPages={claimedPages}
+                  myListings={listings.filter(l => l.seller === pubkey)}
+                  identity={identity ?? undefined}
+                />
+              </div>
             )}
-            {tab === "packs" && (
-              <>
+            {visitedTabs.has("packs") && (
+              <div style={{ display: tab === "packs" ? undefined : "none" }}>
                 <Packs
                   onOpen={openPack}
                   onDemo={openPackDemo}
@@ -807,11 +813,15 @@ function HomeInner() {
                   }}
                 />
                 <MyStickers ownership={ownership} onSell={listForSale} myListings={listings.filter(l => l.seller === pubkey)} />
-              </>
+              </div>
             )}
-            {tab === "fixture" && <Fixture identity={identity ?? undefined} />}
-            {tab === "game" && (
-              <div style={{ display: "grid", gap: 28 }}>
+            {visitedTabs.has("fixture") && (
+              <div style={{ display: tab === "fixture" ? undefined : "none" }}>
+                <Fixture identity={identity ?? undefined} />
+              </div>
+            )}
+            {visitedTabs.has("game") && (
+              <div style={{ display: tab === "game" ? "grid" : "none", gap: 28 }}>
                 {activeMatch && identity ? (
                   <PenaltyMatchView
                     match={activeMatch}
@@ -890,15 +900,17 @@ function HomeInner() {
                 )}
               </div>
             )}
-            {tab === "market" && (
-              <Market
-                listings={visibleListings}
-                settlements={settlements}
-                myOwnership={ownership}
-                myPubkey={pubkey}
-                onBuy={buyListing}
-                onCancel={cancelListing}
-              />
+            {visitedTabs.has("market") && (
+              <div style={{ display: tab === "market" ? undefined : "none" }}>
+                <Market
+                  listings={visibleListings}
+                  settlements={settlements}
+                  myOwnership={ownership}
+                  myPubkey={pubkey}
+                  onBuy={buyListing}
+                  onCancel={cancelListing}
+                />
+              </div>
             )}
           </main>
         </>
