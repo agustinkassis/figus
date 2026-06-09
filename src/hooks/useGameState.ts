@@ -29,10 +29,11 @@ function isLocalClaimed(pubkey: string): boolean {
 }
 
 function mergeOwn(nostr: Ownership, local: Ownership): Ownership {
+  // Server is authoritative for stickers it has records for.
+  // Local is kept only for pending optimistic adds not yet confirmed by server.
   const result: Ownership = { ...local };
   for (const k of Object.keys(nostr)) {
-    const n = Number(k);
-    result[n] = Math.max(result[n] ?? 0, nostr[n]);
+    result[Number(k)] = nostr[Number(k)];
   }
   return result;
 }
@@ -119,7 +120,6 @@ export function useGameState(pubkey: string | null) {
         ]);
         if (!cancelled) {
           ownEvents.current = owns;
-          setOwnership(subtractSales(mergeOwn(parseOwnership(owns), readLocalOwn(pubkey)), soldCounts.current));
           const claimed = grants.length > 0 || freeClaims.length > 0 || isLocalClaimed(pubkey);
           setHasClaimedFreePack(claimed);
           if (claimed) {
@@ -157,12 +157,9 @@ export function useGameState(pubkey: string | null) {
             }
           }
           soldCounts.current = counts;
-          if (Object.keys(counts).length > 0) {
-            setOwnership(subtractSales(
-              mergeOwn(parseOwnership(ownEvents.current), readLocalOwn(pubkey)),
-              counts
-            ));
-          }
+          const merged = mergeOwn(parseOwnership(ownEvents.current), readLocalOwn(pubkey));
+          writeLocalOwn(pubkey, merged);
+          setOwnership(subtractSales(merged, counts));
         }
       }
 
@@ -242,7 +239,9 @@ export function useGameState(pubkey: string | null) {
       { kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY], "#p": [pubkey] },
     ]);
     ownEvents.current = owns;
-    setOwnership(subtractSales(mergeOwn(parseOwnership(owns), readLocalOwn(pubkey)), soldCounts.current));
+    const merged = mergeOwn(parseOwnership(owns), readLocalOwn(pubkey));
+    writeLocalOwn(pubkey, merged);
+    setOwnership(subtractSales(merged, soldCounts.current));
   }, [pubkey]);
 
   const claimPack = useCallback((nums: number[]) => {
