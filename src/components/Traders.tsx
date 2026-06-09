@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { nip19, nip05 } from "nostr-tools";
-import { getPool } from "@/lib/pool";
+import { getPool, list } from "@/lib/pool";
+import { KIND, ISSUER_PUBKEY } from "@/lib/constants";
 import { computeMatch, useTraderInfo, useAllTraders } from "@/hooks/useTraders";
 import { CATALOG, RARITY_META } from "@/lib/catalog";
 import { useLang } from "@/contexts/LangContext";
@@ -28,6 +29,18 @@ export function Traders({
     pubkey: string; npub: string; name?: string; picture?: string; nip05?: string;
   }>>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [playerPubkeys, setPlayerPubkeys] = useState<Set<string>>(new Set());
+
+  // Load active player pubkeys once for search prioritization
+  useEffect(() => {
+    if (!ISSUER_PUBKEY) return;
+    list([{ kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY], limit: 500 }])
+      .then(events => {
+        const pks = new Set(events.flatMap(ev => ev.tags.filter(t => t[0] === "p").map(t => t[1])));
+        setPlayerPubkeys(pks);
+      })
+      .catch(() => {});
+  }, []);
 
   // NIP-50 live search as user types
   useEffect(() => {
@@ -67,6 +80,7 @@ export function Traders({
             }];
           } catch { return []; }
         });
+        results.sort((a, b) => (playerPubkeys.has(b.pubkey) ? 1 : 0) - (playerPubkeys.has(a.pubkey) ? 1 : 0));
         setSuggestions(results);
       } catch { /* silent */ } finally {
         setLoadingSuggestions(false);

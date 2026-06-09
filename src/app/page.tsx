@@ -15,7 +15,8 @@ import { PenaltyGame } from "@/components/PenaltyGame";
 import { Leaderboard } from "@/components/Leaderboard";
 import { PenaltyMatchLobby, PenaltyMatchView } from "@/components/PenaltyMatch";
 import type { PenaltyMatch } from "@/lib/penalty";
-import { ALL_NUMBERS, rollSticker } from "@/lib/catalog";
+import { ALL_NUMBERS, rollSticker, CATALOG, RARITY_META } from "@/lib/catalog";
+import { StickerFace } from "@/components/StickerCard";
 import { ISSUER_PUBKEY, KIND, ALBUM_ID, addr } from "@/lib/constants";
 import { zap } from "@/lib/zap";
 import { subscribeOne } from "@/lib/pool";
@@ -1020,6 +1021,14 @@ function LandingPage({
 }) {
   const { t } = useLang();
   const connectProps = { identity: null, nip07Available, onNip07, onLocal, onLogout, onNip46QR, onNip46Bunker };
+  const [demoKey, setDemoKey] = useState<string | null>(null);
+  const [demoKicked, setDemoKicked] = useState(false);
+
+  function startPenaltyDemo() {
+    const key = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, "0")).join("");
+    setDemoKey(key);
+    setDemoKicked(false);
+  }
 
   return (
     <div style={{ maxWidth: 720, margin: "0 auto", padding: "0 20px 80px" }}>
@@ -1234,6 +1243,84 @@ function LandingPage({
         </div>
       </section>
 
+      {/* ── DEMO PENAL ── */}
+      <section style={{ marginBottom: 60 }}>
+        {!demoKey ? (
+          <div style={{
+            background: "linear-gradient(135deg, rgba(108,196,238,.07), rgba(108,196,238,.02))",
+            border: "1px solid rgba(108,196,238,.3)",
+            borderRadius: 20,
+            padding: "44px 28px",
+            textAlign: "center",
+          }}>
+            <div style={{ fontSize: 52, marginBottom: 16, lineHeight: 1 }}>⚽</div>
+            <div style={{ fontFamily: "var(--display)", fontSize: 22, color: "#6cc4ee", marginBottom: 8 }}>
+              PROBÁ UN PENAL
+            </div>
+            <p style={{ fontSize: 13, color: "var(--muted)", margin: "0 auto 28px", maxWidth: 380, lineHeight: 1.7 }}>
+              Cada gol que convertís con tu cuenta te da un sobre de figuritas. Probá cómo funciona sin conectarte.
+            </p>
+            <button
+              onClick={startPenaltyDemo}
+              style={{
+                background: "linear-gradient(135deg, #6cc4ee, #3a9fc8)",
+                color: "#030b18",
+                border: "none",
+                padding: "14px 40px",
+                borderRadius: 12,
+                fontSize: 15,
+                fontWeight: 900,
+                fontFamily: "var(--condensed)",
+                letterSpacing: 1,
+                cursor: "pointer",
+                boxShadow: "0 4px 20px rgba(108,196,238,.25)",
+              }}
+            >
+              PATEAR PENAL
+            </button>
+          </div>
+        ) : (
+          <div style={{
+            background: "linear-gradient(135deg, rgba(108,196,238,.07), rgba(108,196,238,.02))",
+            border: "1px solid rgba(108,196,238,.3)",
+            borderRadius: 20,
+            padding: "24px 20px",
+          }}>
+            <PenaltyGame
+              pubkey={demoKey}
+              onGoal={() => {}}
+              onPublish={() => setDemoKicked(true)}
+            />
+            {demoKicked && (
+              <div style={{ textAlign: "center", marginTop: 18 }}>
+                <button
+                  onClick={startPenaltyDemo}
+                  style={{
+                    background: "transparent",
+                    color: "#6cc4ee",
+                    border: "1px solid rgba(108,196,238,.4)",
+                    padding: "10px 28px",
+                    borderRadius: 10,
+                    fontSize: 12,
+                    fontWeight: 900,
+                    fontFamily: "var(--condensed)",
+                    letterSpacing: 0.5,
+                    cursor: "pointer",
+                  }}
+                >
+                  ⚽ PATEAR DE NUEVO
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* ── DEMO MERCADITO ── */}
+      <section style={{ marginBottom: 60 }}>
+        <MarketDemoSection />
+      </section>
+
       {/* ── TECH STACK ── */}
       <section style={{ marginBottom: 60 }}>
         <div style={{
@@ -1364,6 +1451,128 @@ function TechBadge({ icon, label, desc }: { icon: string; label: string; desc: s
 }
 
 // ─────────────────────────────────────────
+
+function MarketDemoSection() {
+  const [phase, setPhase] = useState<"idle" | "buying" | "done">("idle");
+  const [stickerNum, setStickerNum] = useState(() => rollSticker());
+
+  function buy() {
+    setPhase("buying");
+    setTimeout(() => setPhase("done"), 1800);
+  }
+
+  function reset() {
+    setStickerNum(rollSticker());
+    setPhase("idle");
+  }
+
+  const sticker = CATALOG[stickerNum];
+  const rarity = RARITY_META[sticker.rarity];
+
+  return (
+    <div style={{
+      background: "linear-gradient(135deg, rgba(82,183,136,.07), rgba(82,183,136,.02))",
+      border: "1px solid rgba(82,183,136,.3)",
+      borderRadius: 20,
+      padding: "36px 28px",
+    }}>
+      <div style={{ textAlign: "center", marginBottom: 28 }}>
+        <div style={{ fontSize: 52, lineHeight: 1, marginBottom: 12 }}>🏷️</div>
+        <div style={{ fontFamily: "var(--display)", fontSize: 22, color: "#52b788", marginBottom: 8 }}>
+          COMPRÁ UNA FIGURITA
+        </div>
+        <p style={{ fontSize: 13, color: "var(--muted)", margin: "0 auto", maxWidth: 380, lineHeight: 1.7 }}>
+          Comprá las figuritas que te faltan directamente de otros jugadores. Pagás en sats con Lightning.
+        </p>
+      </div>
+
+      {phase !== "done" ? (
+        <div style={{
+          background: "var(--panel)",
+          border: "1px solid var(--line)",
+          borderRadius: 14,
+          padding: 14,
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+          maxWidth: 400,
+          margin: "0 auto",
+        }}>
+          <div style={{
+            width: 66, height: 88, borderRadius: 9,
+            border: `2px solid ${rarity.ring}`,
+            overflow: "hidden", flexShrink: 0,
+            boxShadow: `0 0 12px ${rarity.glow}44`,
+          }}>
+            <StickerFace num={stickerNum} compact />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: "var(--ink)", marginBottom: 2 }}>{sticker.name}</div>
+            <div style={{ fontSize: 11, color: rarity.ring, fontFamily: "var(--condensed)", fontWeight: 700, marginBottom: 6 }}>{rarity.label}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+              <div style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--panel2)", display: "grid", placeItems: "center", fontSize: 12, flexShrink: 0 }}>👤</div>
+              <span style={{ fontSize: 10, color: "var(--muted)", fontFamily: "var(--condensed)" }}>@satoshi_ar · ⚡ 21 sats</span>
+            </div>
+            <button
+              onClick={buy}
+              disabled={phase === "buying"}
+              style={{
+                background: phase === "buying" ? "var(--panel2)" : "linear-gradient(135deg,#52b788,#3a8f68)",
+                color: phase === "buying" ? "var(--muted)" : "#fff",
+                border: "none",
+                padding: "8px 18px",
+                borderRadius: 9,
+                fontWeight: 900,
+                fontSize: 12,
+                fontFamily: "var(--condensed)",
+                letterSpacing: 0.5,
+                cursor: phase === "buying" ? "default" : "pointer",
+                width: "100%",
+              }}
+            >
+              {phase === "buying" ? "⏳ Pagando…" : `⚡ COMPRAR · 21 sats`}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ textAlign: "center" }}>
+          <div style={{ animation: "pop .35s cubic-bezier(.34,1.56,.64,1) both", marginBottom: 12 }}>
+            <div style={{ fontSize: 36, lineHeight: 1 }}>✅</div>
+            <div style={{ fontFamily: "var(--display)", fontSize: 20, color: "#52b788", marginTop: 6 }}>¡Compraste!</div>
+            <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>La figurita quedó en tu álbum</div>
+          </div>
+          <div style={{
+            width: 120, height: 160, borderRadius: 12,
+            border: `2px solid ${rarity.ring}`,
+            overflow: "hidden", margin: "16px auto",
+            boxShadow: `0 0 24px ${rarity.glow}66`,
+            animation: "pop .4s .1s cubic-bezier(.34,1.56,.64,1) both",
+          }}>
+            <StickerFace num={stickerNum} />
+          </div>
+          <button
+            onClick={reset}
+            style={{
+              background: "transparent",
+              color: "#52b788",
+              border: "1px solid rgba(82,183,136,.4)",
+              padding: "10px 28px",
+              borderRadius: 10,
+              fontSize: 12,
+              fontWeight: 900,
+              fontFamily: "var(--condensed)",
+              letterSpacing: 0.5,
+              cursor: "pointer",
+              marginTop: 8,
+            }}
+          >
+            PROBAR CON OTRA FIGURITA
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Resuelve la Lightning Address (lud16) del perfil kind:0 del vendedor
 async function resolveSellerLnAddress(pubkey: string): Promise<string> {

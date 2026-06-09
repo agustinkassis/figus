@@ -857,6 +857,17 @@ export function PenaltyMatchLobby({
     pubkey: string; npub: string; name?: string; picture?: string; nip05?: string;
   }>>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [playerPubkeys, setPlayerPubkeys] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!ISSUER_PUBKEY) return;
+    list([{ kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY], limit: 500 }])
+      .then(events => {
+        const pks = new Set(events.flatMap(ev => ev.tags.filter(t => t[0] === "p").map(t => t[1])));
+        setPlayerPubkeys(pks);
+      })
+      .catch(() => {});
+  }, []);
 
   // Resolve pubkey live as the user types
   useEffect(() => {
@@ -953,6 +964,7 @@ export function PenaltyMatchLobby({
             }];
           } catch { return []; }
         });
+        results.sort((a, b) => (playerPubkeys.has(b.pubkey) ? 1 : 0) - (playerPubkeys.has(a.pubkey) ? 1 : 0));
         setSuggestions(results);
       } catch { /* silent */ } finally {
         setLoadingSuggestions(false);
