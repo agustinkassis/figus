@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { nip19, nip05 } from "nostr-tools";
-import { getPool, list } from "@/lib/pool";
+import { list, searchProfiles } from "@/lib/pool";
 import { KIND, ISSUER_PUBKEY } from "@/lib/constants";
 import { computeMatch, useTraderInfo, useAllTraders } from "@/hooks/useTraders";
 import { CATALOG, RARITY_META } from "@/lib/catalog";
@@ -59,11 +59,9 @@ export function Traders({
     setLoadingSuggestions(true);
     const timer = setTimeout(async () => {
       try {
-        const pool = getPool();
-        const evs = await pool.querySync(
+        const evs = await searchProfiles(
           ["wss://relay.nostr.band", "wss://search.nos.today"],
-          { kinds: [0], search: searchTerm, limit: 8 },
-          { maxWait: 4000 }
+          searchTerm
         );
         const seen = new Set<string>();
         const results = evs.flatMap(ev => {

@@ -11,7 +11,7 @@ import type { PenaltyMatch as PenaltyMatchType } from "@/lib/penalty";
 import { usePenaltyMatch, useTurnMap, createMatch, cancelMatch } from "@/hooks/usePenaltyMatch";
 import type { EventTemplate, Event as NostrEvent } from "nostr-tools";
 import { signEvent } from "@/lib/identity";
-import { list, subscribe, getPool, getRelays } from "@/lib/pool";
+import { list, subscribe, getPool, getRelays, searchProfiles } from "@/lib/pool";
 import { KIND, ISSUER_PUBKEY } from "@/lib/constants";
 import { CATALOG, RARITY_META, TEAMS, teamName } from "@/lib/catalog";
 import { StickerFace } from "@/components/StickerCard";
@@ -943,11 +943,9 @@ export function PenaltyMatchLobby({
     setLoadingSuggestions(true);
     const timer = setTimeout(async () => {
       try {
-        const pool = getPool();
-        const evs = await pool.querySync(
+        const evs = await searchProfiles(
           ["wss://relay.nostr.band", "wss://search.nos.today"],
-          { kinds: [0], search: searchTerm, limit: 8 },
-          { maxWait: 4000 }
+          searchTerm
         );
         const seen = new Set<string>();
         const results = evs.flatMap(ev => {

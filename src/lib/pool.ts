@@ -52,4 +52,15 @@ export function subscribe(
   return () => closers.forEach((c) => c());
 }
 
+// Search query usando un pool temporal para no contaminar el pool principal
+// con relays de búsqueda que pueden ser lentos o inestables.
+export async function searchProfiles(relays: string[], searchTerm: string, limit = 8): Promise<Event[]> {
+  const searchPool = new SimplePool();
+  try {
+    return await searchPool.querySync(relays, { kinds: [0], search: searchTerm, limit }, { maxWait: 4000 });
+  } finally {
+    searchPool.close(relays);
+  }
+}
+
 export type { Event, Filter };
