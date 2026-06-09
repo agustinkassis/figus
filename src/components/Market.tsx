@@ -30,8 +30,14 @@ export function Market({
   const { t } = useLang();
   const [zoomed, setZoomed] = useState<Listing | null>(null);
   const [cancelingAll, setCancelingAll] = useState(false);
+  const [ownerFilter, setOwnerFilter] = useState<"all" | "missing" | "have">("all");
   const mine  = listings.filter((l) => l.seller === myPubkey);
-  const others = listings.filter((l) => l.seller !== myPubkey);
+  const others = listings.filter((l) => {
+    if (l.seller === myPubkey) return false;
+    if (ownerFilter === "missing") return (myOwnership[l.stickerNum] ?? 0) === 0;
+    if (ownerFilter === "have")    return (myOwnership[l.stickerNum] ?? 0) > 0;
+    return true;
+  });
 
   async function handleCancelAll() {
     if (!onCancelAll || mine.length === 0) return;
@@ -134,6 +140,32 @@ export function Market({
             </div>
           )}
 
+          {/* Filtros */}
+          {myPubkey && (
+            <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+              {(["all", "missing", "have"] as const).map((f) => {
+                const label = f === "all" ? t.market_filter_all : f === "missing" ? t.market_filter_missing : t.market_filter_have;
+                const active = ownerFilter === f;
+                return (
+                  <button
+                    key={f}
+                    onClick={() => setOwnerFilter(f)}
+                    style={{
+                      padding: "6px 14px", borderRadius: 99, fontSize: 11,
+                      fontFamily: "var(--condensed)", fontWeight: 900, letterSpacing: 0.5,
+                      cursor: "pointer", border: "1px solid",
+                      borderColor: active ? "var(--gold)" : "var(--line)",
+                      background: active ? "rgba(232,185,35,0.15)" : "transparent",
+                      color: active ? "var(--gold)" : "var(--muted)",
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <div style={{ display: "grid", gap: 12 }}>
             {others.length === 0 && (
               <p style={{ opacity: 0.5 }}>{t.market_no_offers}</p>
@@ -213,7 +245,7 @@ export function Market({
 
           {settlements.length > 0 && (
             <div style={{ marginTop: 26 }}>
-              <h3 style={{ fontSize: 14, opacity: 0.7 }}>{t.market_transfers}</h3>
+              <h3 style={{ fontSize: 14, opacity: 0.7 }}>{t.market_transfers} ({settlements.length})</h3>
               {settlements.map((s) => (
                 <div
                   key={s.id}
