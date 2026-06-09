@@ -189,14 +189,19 @@ export function Market({
                 <div
                   key={s.id}
                   style={{
-                    fontSize: 12,
-                    color: "var(--muted)",
+                    display: "flex", alignItems: "center", gap: 6,
                     padding: "6px 0",
                     borderBottom: "1px solid var(--line)",
+                    flexWrap: "wrap",
                   }}
                 >
-                  ✅ #{s.stickerNum} · {s.from.slice(0, 8)}… → {s.to.slice(0, 8)}… ·{" "}
-                  {s.price} sats
+                  <span style={{ fontSize: 11, color: "var(--gold)" }}>✅ #{s.stickerNum}</span>
+                  <NostrAvatar pubkey={s.from} size={18} fontSize={10} nameColor="var(--muted)" />
+                  <span style={{ fontSize: 10, color: "var(--muted)" }}>→</span>
+                  <NostrAvatar pubkey={s.to} size={18} fontSize={10} nameColor="var(--muted)" />
+                  <span style={{ fontSize: 10, color: "var(--gold)", fontFamily: "var(--condensed)", fontWeight: 700, marginLeft: "auto" }}>
+                    ⚡ {s.price} sats
+                  </span>
                 </div>
               ))}
             </div>

@@ -12,6 +12,7 @@ import {
   type BetPick,
 } from "@/hooks/useBets";
 import { InvoiceModal } from "./InvoiceModal";
+import { NostrAvatar } from "./NostrAvatar";
 import type { Translations } from "@/lib/i18n";
 
 interface Props {
@@ -206,8 +207,9 @@ function BetRow({
           <div style={{ fontFamily: "var(--condensed)", fontSize: 10, fontWeight: 900, color: "var(--ink)" }}>
             {pickLabel(offer.pick)} · {offer.amount} {t.bet_sats}
           </div>
-          <div style={{ fontFamily: "var(--condensed)", fontSize: 9, color: "var(--muted)", marginTop: 1 }}>
-            {offer.author.slice(0, 8)}… · {t.bet_fee}
+          <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 2, flexWrap: "wrap" }}>
+            <NostrAvatar pubkey={offer.author} size={16} fontSize={9} nameColor="var(--muted)" />
+            <span style={{ fontFamily: "var(--condensed)", fontSize: 9, color: "var(--muted)" }}>· {t.bet_fee}</span>
           </div>
           {notify && (
             <div style={{ fontSize: 9, color: "var(--gold)", fontFamily: "var(--condensed)", marginTop: 2 }}>{notify}</div>
