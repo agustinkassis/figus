@@ -927,16 +927,16 @@ export function PenaltyMatchLobby({
       return () => { clearTimeout(timer); setResolving(false); };
     }
 
-    // Free-text NIP-50 search via relay.nostr.band — debounce 400ms
+    // Free-text NIP-50 search — debounce 400ms
     if (searchTerm.length < 2) return;
     setLoadingSuggestions(true);
     const timer = setTimeout(async () => {
       try {
         const pool = getPool();
         const evs = await pool.querySync(
-          ["wss://relay.nostr.band"],
+          ["wss://relay.nostr.band", "wss://search.nos.today"],
           { kinds: [0], search: searchTerm, limit: 8 },
-          { maxWait: 3000 }
+          { maxWait: 4000 }
         );
         const seen = new Set<string>();
         const results = evs.flatMap(ev => {

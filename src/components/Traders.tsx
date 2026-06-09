@@ -48,9 +48,9 @@ export function Traders({
       try {
         const pool = getPool();
         const evs = await pool.querySync(
-          ["wss://relay.nostr.band"],
+          ["wss://relay.nostr.band", "wss://search.nos.today"],
           { kinds: [0], search: searchTerm, limit: 8 },
-          { maxWait: 3000 }
+          { maxWait: 4000 }
         );
         const seen = new Set<string>();
         const results = evs.flatMap(ev => {
