@@ -387,6 +387,32 @@ function HomeInner() {
   }
 
   // --- cancelar venta: republica el listing con status "closed" ---
+  async function cancelAllListings(listings: Listing[]) {
+    if (!identity || listings.length === 0) return;
+    notify(`⏳ Cancelando ${listings.length} publicaciones…`);
+    // Firmar secuencialmente (NIP-07 no admite prompts en paralelo)
+    const events: Awaited<ReturnType<typeof signEvent>>[] = [];
+    for (const listing of listings) {
+      const template: EventTemplate = {
+        kind: KIND.LISTING,
+        created_at: Math.floor(Date.now() / 1000),
+        content: "",
+        tags: [
+          ["d", listing.d],
+          ["sticker", `${ALBUM_ID}:${listing.stickerNum}`],
+          ["price", String(listing.price)],
+          ["status", "closed"],
+          ["p", ISSUER_PUBKEY],
+        ],
+      };
+      events.push(await signEvent(template, identity.mode));
+    }
+    // Publicar en paralelo
+    await Promise.allSettled(events.map(ev => Promise.any(getPool().publish(getRelays(), ev))));
+    notify(`✅ ${listings.length} publicaciones canceladas`);
+    setTimeout(refresh, 800);
+  }
+
   async function cancelListing(listing: Listing) {
     if (!identity) return;
     const template: EventTemplate = {
@@ -909,6 +935,7 @@ function HomeInner() {
                   myPubkey={pubkey}
                   onBuy={buyListing}
                   onCancel={cancelListing}
+                  onCancelAll={cancelAllListings}
                 />
               </div>
             )}

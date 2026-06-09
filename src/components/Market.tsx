@@ -17,6 +17,7 @@ export function Market({
   myPubkey,
   onBuy,
   onCancel,
+  onCancelAll,
 }: {
   listings: Listing[];
   settlements: Settlement[];
@@ -24,11 +25,19 @@ export function Market({
   myPubkey: string | null;
   onBuy: (listing: Listing) => void;
   onCancel: (listing: Listing) => void;
+  onCancelAll?: (listings: Listing[]) => Promise<void>;
 }) {
   const { t } = useLang();
   const [zoomed, setZoomed] = useState<Listing | null>(null);
+  const [cancelingAll, setCancelingAll] = useState(false);
   const mine  = listings.filter((l) => l.seller === myPubkey);
   const others = listings.filter((l) => l.seller !== myPubkey);
+
+  async function handleCancelAll() {
+    if (!onCancelAll || mine.length === 0) return;
+    setCancelingAll(true);
+    try { await onCancelAll(mine); } finally { setCancelingAll(false); }
+  }
 
   useEffect(() => {
     if (!zoomed) return;
@@ -56,11 +65,31 @@ export function Market({
           {/* Mis ventas activas */}
           {mine.length > 0 && (
             <div style={{ marginBottom: 18 }}>
-              <div style={{
-                fontSize: 10, color: "var(--muted)", fontFamily: "var(--condensed)",
-                fontWeight: 900, letterSpacing: 1.5, marginBottom: 10,
-              }}>
-                MIS VENTAS ACTIVAS
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{
+                  fontSize: 10, color: "var(--muted)", fontFamily: "var(--condensed)",
+                  fontWeight: 900, letterSpacing: 1.5,
+                }}>
+                  MIS VENTAS ACTIVAS ({mine.length})
+                </div>
+                {onCancelAll && mine.length > 1 && (
+                  <button
+                    onClick={handleCancelAll}
+                    disabled={cancelingAll}
+                    style={{
+                      background: "transparent",
+                      border: "1px solid rgba(255,80,80,0.4)",
+                      color: "rgba(255,120,120,0.9)",
+                      padding: "5px 12px", borderRadius: 7,
+                      fontSize: 10, fontFamily: "var(--condensed)", fontWeight: 900,
+                      cursor: cancelingAll ? "default" : "pointer",
+                      opacity: cancelingAll ? 0.5 : 1,
+                      letterSpacing: 0.3, flexShrink: 0,
+                    }}
+                  >
+                    {cancelingAll ? "CANCELANDO…" : `CANCELAR TODAS (${mine.length})`}
+                  </button>
+                )}
               </div>
               <div style={{ display: "grid", gap: 8 }}>
                 {mine.map((l) => {
