@@ -109,10 +109,9 @@ function extractZapRequest(receipt: Event): Event | null {
   }
 }
 
-async function handleOpenPack(req: Event) {
+async function handleOpenPack(req: Event, packCount = 1) {
   const buyer = req.pubkey;
-  const count = 7;
-  const drawn = Array.from({ length: count }, rollSticker);
+  const drawn = Array.from({ length: 7 * packCount }, rollSticker);
 
   await publish({
     kind: KIND.GRANT,
@@ -125,7 +124,7 @@ async function handleOpenPack(req: Event) {
   });
 
   for (const n of drawn) await bump(buyer, n, +1);
-  console.log(`🎁 grant a ${buyer.slice(0, 8)}…: figus ${drawn.join(", ")}`);
+  console.log(`🎁 grant a ${buyer.slice(0, 8)}…: ${packCount} sobre(s), figus ${drawn.join(", ")}`);
 }
 
 async function handleBuySticker(req: Event, receipt: Event) {
@@ -194,6 +193,8 @@ async function onReceipt(receipt: Event) {
   try {
     if (action === "open-pack") {
       await handleOpenPack(req!);
+    } else if (action === "open-pack-10") {
+      await handleOpenPack(req!, 10);
     } else if (action === "buy-sticker") {
       await handleBuySticker(req!, receipt);
     } else if (action === "bet-lock") {

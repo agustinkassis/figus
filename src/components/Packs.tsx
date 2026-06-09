@@ -10,12 +10,14 @@ import { SITE_URL } from "@/lib/share";
 
 export function Packs({
   onOpen,
+  onOpenBulk,
   onDemo,
   onCancel,
   busy,
   freePack,
 }: {
   onOpen: () => void;
+  onOpenBulk: () => void;
   onDemo: () => void;
   onCancel: () => void;
   busy: boolean;
@@ -247,6 +249,69 @@ export function Packs({
         </button>
       )}
 
+      {/* Caja × 10 */}
+      <div style={{
+        marginTop: 20,
+        width: "100%",
+        maxWidth: 340,
+        background: "linear-gradient(135deg, rgba(232,185,35,.1), rgba(232,185,35,.04))",
+        border: "1px solid rgba(232,185,35,.35)",
+        borderRadius: 14,
+        padding: "14px 18px",
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
+      }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+            <span style={{
+              fontFamily: "var(--condensed)", fontWeight: 900, fontSize: 14,
+              color: "var(--gold)", letterSpacing: 0.5,
+            }}>
+              {t.pack_bulk_title}
+            </span>
+            <span style={{
+              background: "var(--gold)", color: "#030b18",
+              fontSize: 9, fontWeight: 900, padding: "2px 7px",
+              borderRadius: 99, fontFamily: "var(--condensed)", letterSpacing: 0.5,
+            }}>
+              {t.pack_bulk_discount}
+            </span>
+          </div>
+          <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "var(--condensed)" }}>
+            {t.pack_bulk_subtitle}
+          </div>
+          <div style={{ marginTop: 4, display: "flex", alignItems: "baseline", gap: 6 }}>
+            <span style={{ fontFamily: "var(--condensed)", fontWeight: 900, fontSize: 18, color: "var(--gold)" }}>
+              189 sats
+            </span>
+            <span style={{ fontSize: 11, color: "var(--muted)", textDecoration: "line-through", fontFamily: "var(--condensed)" }}>
+              210
+            </span>
+          </div>
+        </div>
+        <button
+          disabled={busy}
+          onClick={onOpenBulk}
+          style={{
+            background: busy ? "var(--panel2)" : "linear-gradient(135deg, var(--gold), #d4920a)",
+            color: busy ? "var(--muted)" : "#030b18",
+            border: "none",
+            padding: "10px 14px",
+            borderRadius: 10,
+            fontWeight: 900,
+            fontSize: 11,
+            fontFamily: "var(--condensed)",
+            letterSpacing: 0.3,
+            cursor: busy ? "default" : "pointer",
+            flexShrink: 0,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {busy ? t.pack_processing : t.pack_bulk_open}
+        </button>
+      </div>
+
       {/* Demo button */}
       <button
         onClick={onDemo}
@@ -309,10 +374,14 @@ export function PackReveal({
   figus,
   onClose,
   identity,
+  packIndex,
+  totalPacks,
 }: {
   figus: number[];
   onClose: () => void;
   identity?: Identity;
+  packIndex?: number;
+  totalPacks?: number;
 }) {
   const { t } = useLang();
   const [revealed, setRevealed] = useState(0);
@@ -351,17 +420,28 @@ export function PackReveal({
           width: "100%",
         }}
       >
-        <div
-          style={{
-            fontFamily: "var(--condensed)",
-            fontWeight: 900,
-            fontSize: 10,
-            letterSpacing: 2,
-            color: "var(--gold)",
-            marginBottom: 4,
-          }}
-        >
-          FIFA WORLD CUP 2026™
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 4 }}>
+          <div
+            style={{
+              fontFamily: "var(--condensed)",
+              fontWeight: 900,
+              fontSize: 10,
+              letterSpacing: 2,
+              color: "var(--gold)",
+            }}
+          >
+            FIFA WORLD CUP 2026™
+          </div>
+          {totalPacks && packIndex && (
+            <span style={{
+              fontFamily: "var(--condensed)", fontWeight: 900, fontSize: 10,
+              letterSpacing: 0.5, background: "rgba(232,185,35,.15)",
+              border: "1px solid rgba(232,185,35,.4)", color: "var(--gold)",
+              borderRadius: 99, padding: "2px 8px",
+            }}>
+              {packIndex}/{totalPacks}
+            </span>
+          )}
         </div>
         <h2
           style={{
@@ -464,7 +544,7 @@ export function PackReveal({
             letterSpacing: 0.5,
           }}
         >
-          {t.pack_paste}
+          {totalPacks && packIndex && packIndex < totalPacks ? t.pack_next : t.pack_paste}
         </button>
       </div>
     </div>

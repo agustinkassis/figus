@@ -81,6 +81,8 @@ function HomeInner() {
   }, [pubkey]);
   const [toast, setToast] = useState<string | null>(null);
   const [packResult, setPackResult] = useState<number[] | null>(null);
+  const [packQueue, setPackQueue] = useState<number[][]>([]);
+  const packQueueTotal = useRef(0);
   const [penaltyPackPending, setPenaltyPackPending] = useState(false);
   const [busy, setBusy] = useState(false);
   const [invoice, setInvoice] = useState<string | null>(null);
@@ -320,6 +322,114 @@ function HomeInner() {
       if (pollIv) clearInterval(pollIv);
       unsubGrant?.();
       notify("⚠️ " + (e.message || "Error al abrir el sobre"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // --- abrir 10 sobres: zap de 189 sats al issuer ---
+  async function openPackBulk() {
+    if (!identity) return notify("Conectate primero");
+    setBusy(true);
+
+    const since = Math.floor(Date.now() / 1000);
+    let grantReceived = false;
+    let unsubGrant: (() => void) | null = null;
+    let pollIv: ReturnType<typeof setInterval> | null = null;
+    let grantTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    function handleGrant(ev: { created_at: number; tags: string[][] }) {
+      if (grantReceived) return;
+      if (ev.created_at < since - 5) return;
+      const nums = ev.tags
+        .filter((t) => t[0] === "sticker")
+        .map((t) => Number(t[1].split(":")[1]))
+        .filter((n) => n > 0);
+      if (!nums.length) return;
+      grantReceived = true;
+      setInvoice(null);
+      claimPack(nums);
+      const chunks: number[][] = [];
+      for (let i = 0; i < nums.length; i += 7) chunks.push(nums.slice(i, i + 7));
+      packQueueTotal.current = chunks.length;
+      setPackQueue(chunks);
+      refresh();
+      unsubGrant?.();
+      if (pollIv) clearInterval(pollIv);
+      if (grantTimeout) clearTimeout(grantTimeout);
+    }
+
+    unsubGrant = subscribeOne(
+      { kinds: [KIND.GRANT], authors: [ISSUER_PUBKEY], "#p": [identity.pubkey], since },
+      handleGrant
+    );
+
+    const pubkey = identity.pubkey;
+    pollIv = setInterval(async () => {
+      if (grantReceived) return;
+      const { list } = await import("@/lib/pool");
+      const evs = await list([{
+        kinds: [KIND.GRANT], authors: [ISSUER_PUBKEY],
+        "#p": [pubkey], since: since - 5, limit: 1,
+      }]);
+      const latest = evs.sort((a, b) => b.created_at - a.created_at)[0];
+      if (latest) handleGrant(latest);
+    }, 5000);
+
+    grantTimeout = setTimeout(() => {
+      if (!grantReceived) {
+        unsubGrant?.();
+        if (pollIv) clearInterval(pollIv);
+        notify("⚠️ No llegaron las figus en 90s. Verificá que el issuer esté corriendo.");
+      }
+    }, 90000);
+
+    try {
+      const zapPromise = zap(
+        {
+          amountSats: 189,
+          target: { pubkey: ISSUER_PUBKEY, lnurlOrAddress: ISSUER_LN_ADDRESS },
+          extraTags: [
+            ["a", addr(KIND.PACK, ISSUER_PUBKEY, "pack-basico")],
+            ["figus-action", "open-pack-10"],
+          ],
+          comment: "Abriendo caja de 10 sobres",
+          signerMode: identity.mode,
+        },
+        () => {
+          setInvoice(null);
+          notify("⚡ Pago confirmado — esperando figus del issuer…");
+        }
+      );
+      const res = await Promise.race([
+        zapPromise,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Tiempo de firma agotado — si usás Amber, abrilo y aprobá la firma")), 20_000)
+        ),
+      ]);
+      if (!res.paid) {
+        const nwcStr = getNwcString();
+        if (nwcStr) {
+          const nwcTimeout = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("NWC timeout")), 12000)
+          );
+          try {
+            await Promise.race([nwcPay(res.invoice, nwcStr), nwcTimeout]);
+            notify("⚡ Solicitud enviada a tu wallet NWC — esperando figus…");
+          } catch {
+            setInvoice(res.invoice);
+          }
+        } else {
+          setInvoiceAmount(189);
+          setInvoice(res.invoice);
+        }
+      }
+    } catch (e: any) {
+      grantReceived = true;
+      if (grantTimeout) clearTimeout(grantTimeout);
+      if (pollIv) clearInterval(pollIv);
+      unsubGrant?.();
+      notify("⚠️ " + (e.message || "Error al abrir los sobres"));
     } finally {
       setBusy(false);
     }
@@ -830,6 +940,7 @@ function HomeInner() {
               <div style={{ display: tab === "packs" ? undefined : "none" }}>
                 <Packs
                   onOpen={openPack}
+                  onOpenBulk={openPackBulk}
                   onDemo={openPackDemo}
                   onCancel={() => setBusy(false)}
                   busy={busy}
@@ -955,6 +1066,16 @@ function HomeInner() {
 
       {packResult && (
         <PackReveal figus={packResult} onClose={() => setPackResult(null)} identity={identity ?? undefined} />
+      )}
+
+      {packQueue.length > 0 && (
+        <PackReveal
+          figus={packQueue[0]}
+          onClose={() => setPackQueue(q => q.slice(1))}
+          identity={identity ?? undefined}
+          packIndex={packQueueTotal.current - packQueue.length + 1}
+          totalPacks={packQueueTotal.current}
+        />
       )}
 
       {invoice && (

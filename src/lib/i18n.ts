@@ -37,11 +37,16 @@ const T = {
     pack_processing: "PROCESANDO…",
     pack_cancel:     "CANCELAR",
     pack_demo:       "MODO DEMO · sin pago",
+    pack_bulk_title:    "CAJA × 10",
+    pack_bulk_subtitle: "70 figuritas · 10 sobres de 7",
+    pack_bulk_open:     "⚡ ABRIR 10 SOBRES",
+    pack_bulk_discount: "10% OFF",
 
     // Pack reveal
     pack_opened: "¡Sobre abierto!",
     pack_tap:    "TAP PARA CERRAR",
     pack_paste:  "✅ PEGAR EN EL ÁLBUM",
+    pack_next:   "SIGUIENTE SOBRE →",
 
     // Invoice modal
     invoice_title:       "FACTURA LIGHTNING",
@@ -405,11 +410,16 @@ const T = {
     pack_processing: "PROCESSING…",
     pack_cancel:     "CANCEL",
     pack_demo:       "DEMO MODE · no payment",
+    pack_bulk_title:    "BOX × 10",
+    pack_bulk_subtitle: "70 stickers · 10 packs of 7",
+    pack_bulk_open:     "⚡ OPEN 10 PACKS",
+    pack_bulk_discount: "10% OFF",
 
     // Pack reveal
     pack_opened: "Pack opened!",
     pack_tap:    "TAP TO CLOSE",
     pack_paste:  "✅ ADD TO ALBUM",
+    pack_next:   "NEXT PACK →",
 
     // Invoice modal
     invoice_title:       "LIGHTNING INVOICE",
