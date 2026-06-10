@@ -48,6 +48,22 @@ wallet que soporte `make_invoice`/`lookup_invoice` (ej. Alby Hub). Quitá `ISSUE
 El `test:order` mostrará una factura real que debés pagar; el issuer la confirma vía
 `lookup_invoice` y recién ahí concede las figus.
 
+### E2E automático con pago real (`npm run test:pay`)
+
+`issuer/test/order-pay.ts` hace el camino productivo completo **sin intervención
+manual**: publica el `ORDER_REQUEST`, recibe la factura real del issuer, la **paga
+vía NWC** (usando `ISSUER_NWC`/`REWARD_NWC` del entorno — muchas wallets permiten el
+auto-pago) y verifica que llegue el `GRANT` de 7 figus tras la confirmación.
+
+```bash
+npm run test:pay      # requiere issuer con ISSUER_NWC real (sin ISSUER_PAYMENTS=mock)
+```
+
+> ⚠️ Para probar el flujo real **desde el navegador** hay que correr un build de
+> producción (`npm run build && npm run start`). En `next dev` (`NODE_ENV=development`)
+> los botones de sobres usan atajos locales (`openPackDev`) que NO pagan ni publican
+> eventos Nostr — ver `src/app/page.tsx` (`isDev`).
+
 ## Verificación de firmas en lectura (Fix #3)
 
 El relay de test (`issuer/test/relay.ts`) **rechaza eventos con firma inválida**, igual
