@@ -249,7 +249,7 @@ export function PenaltyMatchView({
   const myPubkey = identity.pubkey;
   const isChallenger = myPubkey === match.challenger;
   const { t } = useLang();
-  const { state, publishing, publishCommit, publishBlock, publishReveal } = usePenaltyMatch(match, identity);
+  const { state, publishing, publishError, publishCommit, publishBlock, publishReveal } = usePenaltyMatch(match, identity);
 
   // 3D scene state
   const [scenePhase, setScenePhase] = useState<"aim" | "flying" | "result">("aim");
@@ -543,6 +543,23 @@ export function PenaltyMatchView({
           {phase === "waiting_reveal" && !iAmKicker && (
             <div style={{ textAlign: "center", color: "rgba(255,255,255,.5)", fontSize: 12, padding: "10px 0", fontFamily: "var(--condensed)", fontWeight: 700 }}>
               {t.pm_waiting_reveal}
+            </div>
+          )}
+
+          {/* Error de publicación — visible en cualquier fase */}
+          {publishError && (
+            <div style={{
+              marginTop: 8,
+              padding: "8px 12px",
+              background: "rgba(255,60,60,0.12)",
+              border: "1px solid rgba(255,60,60,0.35)",
+              borderRadius: 8,
+              fontSize: 11,
+              color: "rgba(255,120,120,0.95)",
+              fontFamily: "var(--condensed)",
+              textAlign: "center",
+            }}>
+              ⚠ {publishError}
             </div>
           )}
         </div>

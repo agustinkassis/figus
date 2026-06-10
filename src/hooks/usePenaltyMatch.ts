@@ -81,12 +81,24 @@ export function useOpenMatches(myPubkey: string | null) {
 
 // ─── Estado en vivo de UNA partida ───────────────────────────────────────────
 
+// Publica en relays con timeout de 8s — evita que la UI se quede trabada
+// si todos los relays cuelgan sin responder.
+function publishToRelays(ev: Event): Promise<void> {
+  return Promise.race([
+    Promise.any(getPool().publish(getRelays(), ev)).then(() => {}),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("publish timeout")), 8000)
+    ),
+  ]);
+}
+
 export function usePenaltyMatch(
   match: PenaltyMatch | null,
   identity: Identity | null,
 ) {
   const [state, setState]   = useState<MatchState | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
 
   // Acumuladores de eventos (ref para no re-suscribir en cada render)
   const commitsRef = useRef<PenaltyCommit[]>([]);
@@ -162,9 +174,12 @@ export function usePenaltyMatch(
       ],
     };
     setPublishing(true);
+    setPublishError(null);
     try {
       const ev = await signEvent(tmpl, identity.mode);
-      await Promise.any(getPool().publish(getRelays(), ev));
+      await publishToRelays(ev);
+    } catch (err) {
+      setPublishError(err instanceof Error ? err.message : "Error al publicar");
     } finally {
       setPublishing(false);
     }
@@ -187,9 +202,12 @@ export function usePenaltyMatch(
       ],
     };
     setPublishing(true);
+    setPublishError(null);
     try {
       const ev = await signEvent(tmpl, identity.mode);
-      await Promise.any(getPool().publish(getRelays(), ev));
+      await publishToRelays(ev);
+    } catch (err) {
+      setPublishError(err instanceof Error ? err.message : "Error al publicar");
     } finally {
       setPublishing(false);
     }
@@ -206,14 +224,18 @@ export function usePenaltyMatch(
         const stored = localStorage.getItem(`figus_pcommit_${match.d}`);
         if (stored) {
           const data = JSON.parse(stored);
-          if (data.round === roundNum) {
+          // Accept the stored data if the round matches OR if it's the only data we have
+          if (data.round === roundNum || !pending) {
             pending = { zone: data.zone, nonce: data.nonce };
             pendingCommitRef.current = pending;
           }
         }
       } catch {}
     }
-    if (!pending) return;
+    if (!pending) {
+      setPublishError("No se encontraron datos del remate. Recargá la página e intentá de nuevo.");
+      return;
+    }
 
     const coord = `${KIND.PENALTY_MATCH}:${match.challenger}:${match.d}`;
 
@@ -230,9 +252,10 @@ export function usePenaltyMatch(
       ],
     };
     setPublishing(true);
+    setPublishError(null);
     try {
       const ev = await signEvent(tmpl, identity.mode);
-      await Promise.any(getPool().publish(getRelays(), ev));
+      await publishToRelays(ev);
       pendingCommitRef.current = null;
       try { localStorage.removeItem(`figus_pcommit_${match.d}`); } catch {}
 
@@ -241,12 +264,14 @@ export function usePenaltyMatch(
         ? match.challenged
         : match.challenger;
       sendDM(identity, opponentPubkey, dmYourTurn()).catch(() => {});
+    } catch (err) {
+      setPublishError(err instanceof Error ? err.message : "Error al publicar");
     } finally {
       setPublishing(false);
     }
   }, [match, identity, state]);
 
-  return { state, publishing, publishCommit, publishBlock, publishReveal };
+  return { state, publishing, publishError, publishCommit, publishBlock, publishReveal };
 }
 
 // ─── Helper: publicar desafío ─────────────────────────────────────────────────
