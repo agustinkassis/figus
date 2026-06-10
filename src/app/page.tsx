@@ -1636,7 +1636,15 @@ function TechBadge({ icon, label, desc }: { icon: string; label: string; desc: s
 
 function MarketDemoSection() {
   const [phase, setPhase] = useState<"idle" | "buying" | "done">("idle");
-  const [stickerNum, setStickerNum] = useState(() => rollSticker());
+  // Empezamos en un número fijo para que SSR y el primer render del cliente
+  // coincidan (sin esto, rollSticker() genera valores distintos en server/cliente
+  // y React tira errores de hidratación). El número random se sortea recién
+  // en el cliente, después de hidratar.
+  const [stickerNum, setStickerNum] = useState(ALL_NUMBERS[0]);
+
+  useEffect(() => {
+    setStickerNum(rollSticker());
+  }, []);
 
   function buy() {
     setPhase("buying");
