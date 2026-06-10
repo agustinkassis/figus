@@ -11,14 +11,12 @@ import { SITE_URL } from "@/lib/share";
 export function Packs({
   onOpen,
   onOpenBulk,
-  onDemo,
   onCancel,
   busy,
   freePack,
 }: {
   onOpen: () => void;
   onOpenBulk: () => void;
-  onDemo: () => void;
   onCancel: () => void;
   busy: boolean;
   freePack?: { available: boolean; onOpen: () => void };
@@ -311,25 +309,6 @@ export function Packs({
           {busy ? t.pack_processing : t.pack_bulk_open}
         </button>
       </div>
-
-      {/* Demo button */}
-      <button
-        onClick={onDemo}
-        style={{
-          marginTop: 10,
-          background: "transparent",
-          color: "var(--muted)",
-          border: "1px solid var(--line)",
-          padding: "8px 22px",
-          borderRadius: 10,
-          fontWeight: 700,
-          fontSize: 12,
-          fontFamily: "var(--condensed)",
-          letterSpacing: 0.5,
-        }}
-      >
-        {t.pack_demo}
-      </button>
 
       {/* Odds table */}
       <div
