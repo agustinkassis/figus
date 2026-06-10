@@ -31,6 +31,7 @@ export function Market({
   const [zoomed, setZoomed] = useState<Listing | null>(null);
   const [cancelingAll, setCancelingAll] = useState(false);
   const [ownerFilter, setOwnerFilter] = useState<"all" | "missing" | "have">("all");
+  const [showAllMine, setShowAllMine] = useState(false);
   const mine  = listings.filter((l) => l.seller === myPubkey);
   const others = listings.filter((l) => {
     if (l.seller === myPubkey) return false;
@@ -98,7 +99,7 @@ export function Market({
                 )}
               </div>
               <div style={{ display: "grid", gap: 8 }}>
-                {mine.map((l) => {
+                {(showAllMine ? mine : mine.slice(0, 10)).map((l) => {
                   const s = CATALOG[l.stickerNum];
                   const r = RARITY_META[s.rarity];
                   return (
@@ -137,6 +138,27 @@ export function Market({
                   );
                 })}
               </div>
+              {mine.length > 10 && (
+                <button
+                  onClick={() => setShowAllMine(v => !v)}
+                  style={{
+                    marginTop: 8,
+                    width: "100%",
+                    background: "transparent",
+                    border: "1px solid rgba(232,185,35,0.3)",
+                    color: "var(--gold)",
+                    padding: "8px 0",
+                    borderRadius: 9,
+                    fontSize: 11,
+                    fontFamily: "var(--condensed)",
+                    fontWeight: 900,
+                    letterSpacing: 0.5,
+                    cursor: "pointer",
+                  }}
+                >
+                  {showAllMine ? `▲ VER MENOS` : `▼ VER TODAS (${mine.length})`}
+                </button>
+              )}
             </div>
           )}
 

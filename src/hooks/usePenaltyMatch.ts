@@ -26,51 +26,50 @@ export function useOpenMatches(myPubkey: string | null) {
     if (!myPubkey) { setLoading(false); return; }
     let cancelled = false;
 
-    const parseAll = (evs: Event[]) => {
-      const latest = new Map<string, Event>();
+    // Cache local de eventos: evita volver a consultar relays en cada suscripción.
+    // Clave = "pubkey:d" → solo guardamos el evento más reciente por partida.
+    const evCache = new Map<string, Event>();
+
+    function ingestAndSetState(evs: Event[]) {
       for (const ev of evs) {
         const d = ev.tags.find(t => t[0] === "d")?.[1];
         if (!d) continue;
         const key = `${ev.pubkey}:${d}`;
-        const prev = latest.get(key);
-        if (!prev || ev.created_at > prev.created_at) latest.set(key, ev);
+        const prev = evCache.get(key);
+        if (!prev || ev.created_at > prev.created_at) evCache.set(key, ev);
       }
-      return Array.from(latest.values())
+      const all = Array.from(evCache.values())
         .map(parseMatch)
         .filter((m): m is PenaltyMatch => m !== null && m.status === "open");
-    };
+      setIncoming(all.filter(m => m.challenged === myPubkey));
+      setOutgoing(all.filter(m => m.challenger === myPubkey));
+    }
 
     // Solo partidas de los últimos 60 días — evita traer eventos históricos indefinidamente
     const since = Math.floor(Date.now() / 1000) - 60 * 24 * 3600;
 
     (async () => {
       setLoading(true);
+      // 4000ms: los relays lentos tardan hasta 2-3s — no cortamos antes de que respondan.
       const [recv, sent] = await Promise.all([
-        list([{ kinds: [KIND.PENALTY_MATCH], "#p": [myPubkey], since }]),
-        list([{ kinds: [KIND.PENALTY_MATCH], authors: [myPubkey], since }]),
+        list([{ kinds: [KIND.PENALTY_MATCH], "#p": [myPubkey], since }], 4000),
+        list([{ kinds: [KIND.PENALTY_MATCH], authors: [myPubkey], since }], 4000),
       ]);
       if (!cancelled) {
-        setIncoming(parseAll(recv));
-        setOutgoing(parseAll(sent));
+        ingestAndSetState([...recv, ...sent]);
         setLoading(false);
       }
     })();
 
+    // Suscripción viva: cuando llega un nuevo evento lo ingesta directo en el cache
+    // sin volver a consultar relays (ahorra una round-trip de 4s por evento).
     const unsub = subscribe(
       [
         { kinds: [KIND.PENALTY_MATCH], "#p": [myPubkey], since },
         { kinds: [KIND.PENALTY_MATCH], authors: [myPubkey], since },
       ],
-      () => {
-        Promise.all([
-          list([{ kinds: [KIND.PENALTY_MATCH], "#p": [myPubkey], since }]),
-          list([{ kinds: [KIND.PENALTY_MATCH], authors: [myPubkey], since }]),
-        ]).then(([recv, sent]) => {
-          if (!cancelled) {
-            setIncoming(parseAll(recv));
-            setOutgoing(parseAll(sent));
-          }
-        });
+      (ev) => {
+        if (!cancelled) ingestAndSetState([ev]);
       }
     );
 
@@ -82,12 +81,24 @@ export function useOpenMatches(myPubkey: string | null) {
 
 // ─── Estado en vivo de UNA partida ───────────────────────────────────────────
 
+// Publica en relays con timeout de 8s — evita que la UI se quede trabada
+// si todos los relays cuelgan sin responder.
+function publishToRelays(ev: Event): Promise<void> {
+  return Promise.race([
+    Promise.any(getPool().publish(getRelays(), ev)).then(() => {}),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("publish timeout")), 8000)
+    ),
+  ]);
+}
+
 export function usePenaltyMatch(
   match: PenaltyMatch | null,
   identity: Identity | null,
 ) {
   const [state, setState]   = useState<MatchState | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
 
   // Acumuladores de eventos (ref para no re-suscribir en cada render)
   const commitsRef = useRef<PenaltyCommit[]>([]);
@@ -114,9 +125,10 @@ export function usePenaltyMatch(
     const since = match.createdAt - 60;
 
     (async () => {
+      // 4000ms: misma paciencia que el leaderboard — relays lentos tardan ~2-3s.
       const evs = await list([
         { kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": [coord], since },
-      ]);
+      ], 4000);
       if (cancelled) return;
       for (const ev of evs) ingestEvent(ev, match, commitsRef, blocksRef, revealsRef);
       rebuild(match);
@@ -162,9 +174,12 @@ export function usePenaltyMatch(
       ],
     };
     setPublishing(true);
+    setPublishError(null);
     try {
       const ev = await signEvent(tmpl, identity.mode);
-      await Promise.any(getPool().publish(getRelays(), ev));
+      await publishToRelays(ev);
+    } catch (err) {
+      setPublishError(err instanceof Error ? err.message : "Error al publicar");
     } finally {
       setPublishing(false);
     }
@@ -187,9 +202,12 @@ export function usePenaltyMatch(
       ],
     };
     setPublishing(true);
+    setPublishError(null);
     try {
       const ev = await signEvent(tmpl, identity.mode);
-      await Promise.any(getPool().publish(getRelays(), ev));
+      await publishToRelays(ev);
+    } catch (err) {
+      setPublishError(err instanceof Error ? err.message : "Error al publicar");
     } finally {
       setPublishing(false);
     }
@@ -206,14 +224,18 @@ export function usePenaltyMatch(
         const stored = localStorage.getItem(`figus_pcommit_${match.d}`);
         if (stored) {
           const data = JSON.parse(stored);
-          if (data.round === roundNum) {
+          // Accept the stored data if the round matches OR if it's the only data we have
+          if (data.round === roundNum || !pending) {
             pending = { zone: data.zone, nonce: data.nonce };
             pendingCommitRef.current = pending;
           }
         }
       } catch {}
     }
-    if (!pending) return;
+    if (!pending) {
+      setPublishError("No se encontraron datos del remate. Recargá la página e intentá de nuevo.");
+      return;
+    }
 
     const coord = `${KIND.PENALTY_MATCH}:${match.challenger}:${match.d}`;
 
@@ -230,9 +252,10 @@ export function usePenaltyMatch(
       ],
     };
     setPublishing(true);
+    setPublishError(null);
     try {
       const ev = await signEvent(tmpl, identity.mode);
-      await Promise.any(getPool().publish(getRelays(), ev));
+      await publishToRelays(ev);
       pendingCommitRef.current = null;
       try { localStorage.removeItem(`figus_pcommit_${match.d}`); } catch {}
 
@@ -241,12 +264,14 @@ export function usePenaltyMatch(
         ? match.challenged
         : match.challenger;
       sendDM(identity, opponentPubkey, dmYourTurn()).catch(() => {});
+    } catch (err) {
+      setPublishError(err instanceof Error ? err.message : "Error al publicar");
     } finally {
       setPublishing(false);
     }
   }, [match, identity, state]);
 
-  return { state, publishing, publishCommit, publishBlock, publishReveal };
+  return { state, publishing, publishError, publishCommit, publishBlock, publishReveal };
 }
 
 // ─── Helper: publicar desafío ─────────────────────────────────────────────────
@@ -299,7 +324,7 @@ export async function cancelMatch(identity: Identity, match: PenaltyMatch): Prom
 
 function ingestEvent(
   ev: Event,
-  match: PenaltyMatch,
+  _match: PenaltyMatch,
   commitsRef: React.MutableRefObject<PenaltyCommit[]>,
   blocksRef:  React.MutableRefObject<PenaltyBlock[]>,
   revealsRef: React.MutableRefObject<PenaltyReveal[]>,
@@ -354,21 +379,32 @@ export function useTurnMap(
       );
     }
 
-    async function check() {
-      if (cancelled) return;
-      const evs = await list([
-        { kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": coords, since },
-      ]);
-      if (cancelled) return;
+    // Cache local de eventos de turno: evita round-trip a relays en cada suscripción.
+    const evsCache = new Map<string, Event>();
+
+    function recalcTurnMap() {
+      const all = Array.from(evsCache.values());
       const next = new Map<string, boolean | null>();
-      for (const m of allMatches) next.set(m.id, turnFor(m, evs));
+      for (const m of allMatches) next.set(m.id, turnFor(m, all));
       setTurnMap(next);
     }
 
-    check();
+    (async () => {
+      if (cancelled) return;
+      // 4000ms: igual que leaderboard y usePenaltyMatch.
+      const evs = await list([
+        { kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": coords, since },
+      ], 4000);
+      if (cancelled) return;
+      for (const ev of evs) evsCache.set(ev.id, ev);
+      recalcTurnMap();
+    })();
+
     const unsub = subscribe(
       [{ kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": coords, since }],
-      () => check(),
+      (ev) => {
+        if (!cancelled) { evsCache.set(ev.id, ev); recalcTurnMap(); }
+      },
     );
     return () => { cancelled = true; unsub(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
