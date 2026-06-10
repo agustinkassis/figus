@@ -188,9 +188,9 @@ export function Market({
             </div>
           )}
 
-          <div style={{ display: "grid", gap: 12 }}>
+          <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
             {others.length === 0 && (
-              <p style={{ opacity: 0.5 }}>{t.market_no_offers}</p>
+              <p style={{ opacity: 0.5, gridColumn: "1 / -1" }}>{t.market_no_offers}</p>
             )}
             {others.map((l) => {
               const s = CATALOG[l.stickerNum];
@@ -203,59 +203,66 @@ export function Market({
                   onClick={() => setZoomed(l)}
                   style={{
                     display: "flex",
+                    flexDirection: "column",
                     alignItems: "center",
-                    gap: 12,
+                    gap: 6,
                     background: "var(--panel)",
-                    border: "1px solid var(--line)",
+                    border: `1px solid ${alreadyOwn ? "rgba(34,197,94,.35)" : "var(--line)"}`,
                     borderRadius: 12,
-                    padding: 12,
+                    padding: "10px 8px 8px",
                     cursor: "pointer",
+                    position: "relative",
                   }}
                 >
-                  <div
-                    style={{
-                      width: 56,
-                      height: 74,
-                      borderRadius: 8,
-                      border: `2px solid ${r.ring}`,
-                      overflow: "hidden",
-                      flexShrink: 0,
-                      boxShadow: `0 0 8px ${r.glow}44`,
-                    }}
-                  >
+                  {alreadyOwn && (
+                    <span style={{
+                      position: "absolute", top: 6, right: 6,
+                      fontSize: 8, fontFamily: "var(--condensed)", fontWeight: 900,
+                      letterSpacing: 0.3, color: "rgb(34,197,94)",
+                      background: "rgba(34,197,94,.15)", border: "1px solid rgba(34,197,94,.3)",
+                      borderRadius: 99, padding: "2px 5px",
+                    }}>
+                      {t.market_i_have_it}
+                    </span>
+                  )}
+                  <div style={{
+                    width: 64, height: 84,
+                    borderRadius: 8,
+                    border: `2px solid ${r.ring}`,
+                    overflow: "hidden",
+                    boxShadow: `0 0 10px ${r.glow}55`,
+                    flexShrink: 0,
+                  }}>
                     <StickerFace num={l.stickerNum} compact />
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700 }}>{s.name}</div>
-                    <div style={{ fontSize: 12, opacity: 0.6 }}>
-                      {team.name} · <span style={{ color: r.ring }}>{r.label}</span>
-                    </div>
-                    <div style={{ marginTop: 3, display: "flex", alignItems: "center", gap: 6 }}>
-                      <NostrAvatar pubkey={l.seller} size={18} fontSize={11} nameColor="var(--muted)" />
-                      {alreadyOwn && (
-                        <span style={{
-                          fontSize: 9, fontFamily: "var(--condensed)", fontWeight: 900,
-                          letterSpacing: 0.5, color: "rgb(34,197,94)",
-                          background: "rgba(34,197,94,.12)", border: "1px solid rgba(34,197,94,.3)",
-                          borderRadius: 99, padding: "2px 7px",
-                        }}>
-                          {t.market_i_have_it}
-                        </span>
-                      )}
-                    </div>
+                  <div style={{
+                    fontFamily: "var(--condensed)", fontWeight: 700,
+                    fontSize: 11, color: "var(--ink)",
+                    textAlign: "center", lineHeight: 1.2,
+                    maxWidth: "100%", overflow: "hidden",
+                    textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>
+                    {s.name}
                   </div>
+                  <div style={{ fontSize: 9, color: r.ring, fontFamily: "var(--condensed)", fontWeight: 700 }}>
+                    {r.label.toUpperCase()}
+                  </div>
+                  <NostrAvatar pubkey={l.seller} size={16} fontSize={9} nameColor="var(--muted)" />
                   <button
                     onClick={(e) => { e.stopPropagation(); onBuy(l); }}
                     style={{
+                      width: "100%",
                       background: "linear-gradient(135deg,var(--grass),var(--pitch))",
                       color: "#fff",
                       border: 0,
-                      padding: "10px 14px",
-                      borderRadius: 10,
-                      fontWeight: 800,
-                      fontSize: 14,
+                      padding: "7px 4px",
+                      borderRadius: 8,
+                      fontFamily: "var(--condensed)",
+                      fontWeight: 900,
+                      fontSize: 11,
                       whiteSpace: "nowrap",
                       cursor: "pointer",
+                      marginTop: 2,
                     }}
                   >
                     ⚡ {l.price} sats
