@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyEvent } from "nostr-tools/pure";
+import type { Event } from "nostr-tools";
 import { nwcPayServer, fetchNostrEvents } from "@/lib/nwc-server";
 import { hasClaimed, markClaimed } from "@/lib/claim-ledger";
 import { PAGES, ALL_NUMBERS } from "@/lib/catalog";
@@ -179,9 +180,13 @@ async function fetchOwnedStickers(pubkey: string, issuerPubkey: string): Promise
         { kinds: [30100], authors: [issuerPubkey], "#p": [pubkey] },
         10_000
       );
-      // Keep only the latest event per sticker (addressable)
+      // Keep only the latest event per sticker (addressable).
+      // Verify each event's signature AND that the issuer actually signed it (Fix #3):
+      // a malicious relay could otherwise return forged ownership for an attacker.
       const latest = new Map<string, { tags: string[][] }>();
-      for (const ev of events as { tags: string[][]; created_at: number }[]) {
+      for (const ev of events as { pubkey: string; tags: string[][]; created_at: number }[]) {
+        if (ev.pubkey !== issuerPubkey) continue;
+        try { if (!verifyEvent(ev as unknown as Event)) continue; } catch { continue; }
         const d = ev.tags.find((t) => t[0] === "d")?.[1];
         if (!d) continue;
         const prev = latest.get(d) as { created_at: number } | undefined;

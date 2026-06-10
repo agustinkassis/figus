@@ -16,6 +16,8 @@ export const KIND = {
   PENALTY_REVEAL: 1578,  // regular · pateador · revelación zona + nonce
   REWARD_CLAIM:   1579,  // regular · usuario · solicitud de premio por página/álbum completo
   STEAL_CLAIM:    1580,  // regular · ganador · reclama figurita robada al rival tras ganar penalty
+  ORDER_REQUEST:  1583,  // regular · usuario · pide factura para comprar sobre/figu (figus-action)
+  ORDER_INVOICE:  1584,  // regular · issuer · responde con bolt11 que el issuer cobrará y verificará
   PRONO:          30302, // addressable · usuario · pronóstico de partido (d = "prono:{albumId}:{matchId}")
   BET_OFFER:      30400, // addressable · apostador A · oferta de apuesta (d = bet ID)
   BET_ACCEPT:     1591,  // regular · apostador B · acepta oferta

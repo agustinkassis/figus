@@ -1,12 +1,14 @@
 import "dotenv/config";
-import type { Event } from "nostr-tools";
+import { verifyEvent, type Event } from "nostr-tools";
 import { RELAYS, ALBUM_ID, pool, publish, issuerPubkey, now, tag } from "./lib";
 import { CATALOG, ALL_NUMBERS, rollSticker } from "../src/lib/catalog";
 import {
   parseMatch, parseCommit, parseBlock, parseReveal, deriveMatchState,
 } from "../src/lib/penalty";
-import { handleBetLock, handleBetCancel, loadBetState, settleBetsForMatch } from "./bets";
+import { handleBetLock, handleBetCancel, loadBetState, settleBetsForMatch, payLnAddress, getLud16 } from "./bets";
 import { startFootballPoller } from "./football";
+import { getPayments } from "./payments";
+import { getOrder, putOrder, updateOrder, pendingOrders, wasProcessed, markProcessed, type Order, type OrderAction } from "./store";
 
 const KIND = {
   OWNERSHIP: 30100,
@@ -14,6 +16,9 @@ const KIND = {
   LISTING: 30200,
   SETTLEMENT: 1574,
   ZAP_RECEIPT: 9735,
+  FREE_PACK_CLAIM: 30110,
+  ORDER_REQUEST:  1583,
+  ORDER_INVOICE:  1584,
   PENALTY_MATCH:  30301,
   PENALTY_COMMIT: 1576,
   PENALTY_BLOCK:  1577,
@@ -22,7 +27,13 @@ const KIND = {
   BET_CANCEL:     1593,
 };
 
+// Precios de los sobres (sats). Verificados al cobrar la factura propia.
+const PACK_PRICE = { "open-pack": 21, "open-pack-10": 189 } as const;
+const PACK_COUNT = { "open-pack": 1, "open-pack-10": 10 } as const;
+const MARKET_FEE_RATE = 0.02; // 2% al vendedor en el mercado P2P
+
 const ISSUER = issuerPubkey();
+const payments = getPayments();
 const seen = new Set<string>();
 
 // Pubkey Nostr de la Lightning Address del issuer (puede diferir de ISSUER).
@@ -109,8 +120,7 @@ function extractZapRequest(receipt: Event): Event | null {
   }
 }
 
-async function handleOpenPack(req: Event, packCount = 1) {
-  const buyer = req.pubkey;
+async function handleOpenPack(buyer: string, packCount = 1): Promise<number[]> {
   const drawn = Array.from({ length: 7 * packCount }, rollSticker);
 
   await publish({
@@ -125,91 +135,234 @@ async function handleOpenPack(req: Event, packCount = 1) {
 
   for (const n of drawn) await bump(buyer, n, +1);
   console.log(`🎁 grant a ${buyer.slice(0, 8)}…: ${packCount} sobre(s), figus ${drawn.join(", ")}`);
+  return drawn;
 }
 
-async function handleBuySticker(req: Event, receipt: Event) {
-  const buyer = req.pubkey;
-  const aTag = tag(req, "a"); // "30200:<seller>:<d>"
-  if (!aTag) return;
+// ─── Flujo de órdenes (Fix #1 · Opción A) ─────────────────────────────────────
+// El issuer emite la factura, la cobra en SU wallet y solo concede tras confirmar
+// el pago. Reemplaza la entrega basada en zap receipts no verificados.
+
+// Valida un listing del mercado y devuelve sus datos si está vendible.
+async function loadValidListing(aTag: string): Promise<{ seller: string; num: number; price: number } | null> {
   const [, seller, ...dParts] = aTag.split(":");
   const d = dParts.join(":");
+  if (!seller || !d) return null;
 
-  // buscar el listing
-  const listings = await listOnce([
-    { kinds: [KIND.LISTING], authors: [seller], "#d": [d] },
-  ]);
+  const listings = await listOnce([{ kinds: [KIND.LISTING], authors: [seller], "#d": [d] }]);
   const listing = listings.sort((a, b) => b.created_at - a.created_at)[0];
-  if (!listing) return console.log("⚠️ listing no encontrado:", aTag);
-  if (tag(listing, "status") !== "open") return console.log("⚠️ listing no abierto");
+  if (!listing) { console.log("⚠️ listing no encontrado:", aTag); return null; }
+  // El autor del listing debe coincidir con el seller del coordinate (Fix #4).
+  if (listing.pubkey !== seller) { console.log("⚠️ listing con autor inconsistente"); return null; }
+  if (!verifyEvent(listing)) { console.log("⚠️ listing con firma inválida"); return null; }
+  if (tag(listing, "status") === "sold") { console.log("⚠️ listing ya vendido"); return null; }
 
-  const sticker = tag(listing, "sticker")!;
+  const sticker = tag(listing, "sticker");
+  if (!sticker) return null;
   const num = Number(sticker.split(":")[1]);
+  const price = Number(tag(listing, "price") || "0");
 
-  // validar tenencia del vendedor
   const sellerHas = await getOwnership(seller, num);
-  if (sellerHas < 1) return console.log("⚠️ el vendedor no tiene la figu");
+  if (sellerHas < 1) { console.log("⚠️ el vendedor no tiene la figu"); return null; }
 
-  // transferir
-  await bump(seller, num, -1);
-  await bump(buyer, num, +1);
+  return { seller, num, price };
+}
 
-  // cerrar listing (republicar con status sold) — lo hace el issuer como árbitro
-  // nota: en NIP el addressable lo reemplaza su autor; aquí publicamos el settlement
-  // como verdad y el cliente filtra por settlements.
+// Recibe un ORDER_REQUEST firmado, valida, emite la factura y responde con ORDER_INVOICE.
+async function handleOrderRequest(ev: Event) {
+  if (!verifyEvent(ev)) return console.log("⚠️ order request con firma inválida");
+  if (wasProcessed("order-req", ev.id)) return;
+  markProcessed("order-req", ev.id);
+
+  const action = tag(ev, "figus-action") as OrderAction | undefined;
+  const buyer = ev.pubkey;
+  if (action !== "open-pack" && action !== "open-pack-10" && action !== "buy-sticker") {
+    return console.log("⚠️ order request con acción desconocida:", action);
+  }
+
+  let amountSats: number;
+  let listingCoord: string | undefined;
+  let seller: string | undefined;
+  let stickerNum: number | undefined;
+
+  if (action === "buy-sticker") {
+    const aTag = tag(ev, "a");
+    if (!aTag) return console.log("⚠️ buy-sticker sin coordinate 'a'");
+    const listing = await loadValidListing(aTag);
+    if (!listing) return; // ya logueó el motivo
+    if (listing.seller === buyer) return console.log("⚠️ el comprador no puede ser el vendedor");
+    amountSats = listing.price;
+    listingCoord = aTag;
+    seller = listing.seller;
+    stickerNum = listing.num;
+    if (amountSats <= 0) return console.log("⚠️ precio de listing inválido");
+  } else {
+    amountSats = PACK_PRICE[action];
+  }
+
+  let invoice: string, paymentHash: string;
+  try {
+    ({ invoice, paymentHash } = await payments.makeInvoice(
+      amountSats,
+      `figus:${action}:${buyer.slice(0, 12)}`
+    ));
+  } catch (e) {
+    return console.error("⚠️ no se pudo emitir factura:", (e as Error).message);
+  }
+
+  putOrder({
+    paymentHash, buyer, action, amountSats, status: "pending",
+    ts: now(), listingCoord, seller, stickerNum,
+  });
+
+  await publish({
+    kind: KIND.ORDER_INVOICE,
+    created_at: now(),
+    content: "",
+    tags: [
+      ["p", buyer],
+      ["e", ev.id],
+      ["figus-action", action],
+      ["bolt11", invoice],
+      ["payment_hash", paymentHash],
+      ["amount", String(amountSats)],
+    ],
+  });
+  console.log(`🧾 factura ${action} (${amountSats} sats) para ${buyer.slice(0, 8)}… hash=${paymentHash.slice(0, 12)}…`);
+}
+
+// Concreta una orden ya pagada (idempotente vía ledger).
+async function fulfillOrder(paymentHash: string) {
+  const order = getOrder(paymentHash);
+  if (!order || order.status !== "pending") return;
+
+  let info: { settled: boolean; amountSats: number };
+  try {
+    info = await payments.lookupInvoice(paymentHash);
+  } catch (e) {
+    return console.log(`   lookup ${paymentHash.slice(0, 10)}… falló: ${(e as Error).message}`);
+  }
+  if (!info.settled) return;
+  // Verificar que se cobró al menos el monto esperado (Fix #1).
+  if (info.amountSats > 0 && info.amountSats < order.amountSats) {
+    console.log(`⚠️ pago insuficiente ${info.amountSats} < ${order.amountSats} sats — orden marcada failed`);
+    updateOrder(paymentHash, { status: "failed" });
+    return;
+  }
+
+  if (order.action === "buy-sticker") {
+    await settleBuySticker(order);
+  } else {
+    const drawn = await handleOpenPack(order.buyer, PACK_COUNT[order.action]);
+    updateOrder(paymentHash, { status: "granted", stickers: drawn });
+  }
+}
+
+async function settleBuySticker(order: Order) {
+  const { seller, stickerNum, listingCoord, amountSats, buyer, paymentHash } = order;
+  if (!seller || stickerNum === undefined || !listingCoord) {
+    updateOrder(paymentHash, { status: "failed" });
+    return;
+  }
+
+  // Revalidar tenencia del vendedor en el momento de liquidar.
+  const sellerHas = await getOwnership(seller, stickerNum);
+  if (sellerHas < 1) {
+    console.log("⚠️ el vendedor ya no tiene la figu — orden failed (reembolso manual)");
+    updateOrder(paymentHash, { status: "failed" });
+    return;
+  }
+
+  await bump(seller, stickerNum, -1);
+  await bump(buyer, stickerNum, +1);
+
   await publish({
     kind: KIND.SETTLEMENT,
     created_at: now(),
     content: "",
     tags: [
-      ["e", receipt.id],
-      ["a", aTag],
-      ["sticker", sticker],
+      ["a", listingCoord],
+      ["sticker", `${ALBUM_ID}:${stickerNum}`],
       ["from", seller],
       ["to", buyer],
-      ["price", tag(listing, "price") || "0"],
+      ["price", String(amountSats)],
+      ["payment_hash", paymentHash],
     ],
   });
-  console.log(`🤝 settlement #${num}: ${seller.slice(0, 8)}… → ${buyer.slice(0, 8)}…`);
+  updateOrder(paymentHash, { status: "granted" });
+  console.log(`🤝 settlement #${stickerNum}: ${seller.slice(0, 8)}… → ${buyer.slice(0, 8)}…`);
+
+  // Pagar al vendedor (precio menos fee) vía su Lightning Address.
+  const fee = Math.floor(amountSats * MARKET_FEE_RATE);
+  const payout = amountSats - fee;
+  const lud16 = await getLud16(seller);
+  if (!lud16) {
+    console.log(`⚠️ vendedor ${seller.slice(0, 8)}… sin lud16 — payout ${payout} sats pendiente`);
+    return;
+  }
+  try {
+    await payLnAddress(lud16, payout);
+    console.log(`💸 payout ${payout} sats a ${lud16} (fee ${fee})`);
+  } catch (e) {
+    console.error(`❌ error pagando al vendedor: ${(e as Error).message}`);
+  }
 }
 
 async function onReceipt(receipt: Event) {
-  if (seen.has(receipt.id)) return;
+  if (seen.has(receipt.id) || wasProcessed("receipt", receipt.id)) return;
   seen.add(receipt.id);
+  markProcessed("receipt", receipt.id);
 
-  const recipient = tag(receipt, "p");
+  // El receipt 9735 debe ser un evento con firma válida (Fix #1/#3): un atacante ya
+  // no puede inyectar un receipt arbitrario sin una firma real del relay/provider.
+  if (!verifyEvent(receipt)) {
+    return console.log(`   ⚠️ Receipt ${receipt.id.slice(0, 10)} con firma inválida — ignorando`);
+  }
+
   const req = extractZapRequest(receipt);
   const action = req ? tag(req, "figus-action") : null;
-  const buyer = req?.pubkey ?? receipt.tags.find((t) => t[0] === "P")?.[1];
 
-  const isToIssuer = recipient === ISSUER || (LN_PUBKEY !== null && recipient === LN_PUBKEY);
-
-  console.log(`📥 Receipt ${receipt.id.slice(0, 10)} | recipient=${recipient?.slice(0, 10)} | toIssuer=${isToIssuer} | desc=${req ? "SI" : "NO"} | action=${action ?? "ninguna"} | buyer=${buyer?.slice(0, 10) ?? "?"}`);
-
-  if (!buyer) {
-    console.log("   ⚠️ Sin zapper identificable, ignorando");
+  // IMPORTANTE: open-pack / open-pack-10 / buy-sticker YA NO se conceden desde un
+  // receipt no verificable. Esos flujos van por ORDER_REQUEST + factura propia del
+  // issuer (handleOrderRequest + fulfillOrder), que confirma el pago realmente.
+  if (action === "bet-lock") {
+    // El zap request embebido debe estar firmado por el pagador declarado.
+    if (!req || !verifyEvent(req)) {
+      return console.log("   ⚠️ bet-lock con zap request no firmado — ignorando");
+    }
+    try {
+      await handleBetLock(req, receipt);
+    } catch (e) {
+      console.error("Error procesando bet-lock:", e);
+    }
     return;
   }
 
-  try {
-    if (action === "open-pack") {
-      await handleOpenPack(req!);
-    } else if (action === "open-pack-10") {
-      await handleOpenPack(req!, 10);
-    } else if (action === "buy-sticker") {
-      await handleBuySticker(req!, receipt);
-    } else if (action === "bet-lock") {
-      await handleBetLock(req!, receipt);
-    } else if (isToIssuer) {
-      // Zap a la LN address del issuer sin action explícita → open-pack
-      // (cubre providers que stripean tags custom del zap request en el description)
-      console.log(`⚡ Zap al issuer, asumiendo open-pack para ${buyer.slice(0, 10)}`);
-      await handleOpenPack({ pubkey: buyer, tags: req?.tags ?? [] } as unknown as Event);
-    } else {
-      console.log(`   ⚠️ Receipt ignorado (destinatario: ${recipient?.slice(0, 10)}, no es al issuer)`);
-    }
-  } catch (e) {
-    console.error("Error procesando receipt:", e);
+  // Cualquier otra acción legacy (incl. open-pack) se ignora explícitamente.
+  if (action) {
+    console.log(`   ⚠️ Receipt con acción '${action}' ignorado — usá ORDER_REQUEST para sobres/compras`);
   }
+}
+
+// ─── Sobre gratis (Fix #5) — concedido por el issuer, una vez por pubkey ───────
+
+async function handleFreePack(ev: Event) {
+  if (!verifyEvent(ev)) return console.log("⚠️ free-pack claim con firma inválida");
+  const buyer = ev.pubkey;
+  const key = `free-pack:${buyer}`;
+  if (wasProcessed("free-pack", buyer)) return;
+
+  // Verificar contra relays que no se haya concedido ya (sobrevive reinicios).
+  const priorGrants = await listOnce([
+    { kinds: [KIND.GRANT], authors: [ISSUER], "#p": [buyer], limit: 1 },
+  ]);
+  if (priorGrants.length > 0) {
+    markProcessed("free-pack", buyer);
+    return console.log(`ℹ️ ${buyer.slice(0, 8)}… ya tenía grants — free-pack no se duplica`);
+  }
+
+  markProcessed("free-pack", buyer);
+  await handleOpenPack(buyer, 1);
+  console.log(`🎁 sobre gratis concedido a ${buyer.slice(0, 8)}… (${key})`);
 }
 
 // ─── Robo de figuritas (penalty match) ───────────────────────────────────────
@@ -217,11 +370,13 @@ async function onReceipt(receipt: Event) {
 const stealSeen = new Set<string>(); // coord:winner — dedup en memoria
 
 async function handleStealClaim(ev: Event) {
+  if (!verifyEvent(ev)) return console.log("⚠️ steal claim con firma inválida");
   const coord = tag(ev, "a");
   if (!coord) return console.log("⚠️ steal claim sin coord de partida");
 
-  if (stealSeen.has(ev.id)) return;
+  if (stealSeen.has(ev.id) || wasProcessed("steal", ev.id)) return;
   stealSeen.add(ev.id);
+  markProcessed("steal", ev.id);
 
   console.log(`🃏 steal claim de ${ev.pubkey.slice(0, 8)}… para ${coord} (ev ${ev.id.slice(0, 10)}…)`);
 
@@ -245,14 +400,16 @@ async function handleStealClaim(ev: Event) {
   }]);
   const matchEv = matchEvs.sort((a, b) => b.created_at - a.created_at)[0];
   if (!matchEv) return console.log("⚠️ match event no encontrado:", coord);
+  if (!verifyEvent(matchEv)) return console.log("⚠️ match event con firma inválida");
 
   const match = parseMatch(matchEv);
   if (!match) return console.log("⚠️ no se pudo parsear el match");
 
-  // Obtener eventos de juego (commits, blocks, reveals)
-  const playEvs = await listOnce([{
+  // Obtener eventos de juego (commits, blocks, reveals).
+  // Solo aceptamos jugadas con firma válida (Fix #4): descarta movimientos forjados.
+  const playEvs = (await listOnce([{
     kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": [coord],
-  }]);
+  }])).filter(verifyEvent);
 
   const commits = playEvs
     .filter(e => e.kind === KIND.PENALTY_COMMIT)
@@ -331,12 +488,21 @@ async function handleStealClaim(ev: Event) {
 }
 
 async function main() {
-  console.log("⚡ Issuer Figus escuchando zap receipts…");
+  console.log("⚡ Issuer Figus");
   console.log("   pubkey:", ISSUER);
   console.log("   relays:", RELAYS.join(", "));
+  console.log("   pagos:", payments.mode);
   await resolveLnPubkey();
   await loadBetState();
   startFootballPoller(settleBetsForMatch);
+
+  // Poller de cobro (Fix #1): concede las órdenes pendientes cuya factura ya se pagó.
+  const POLL_MS = Number(process.env.ORDER_POLL_MS || "6000");
+  setInterval(() => {
+    for (const o of pendingOrders()) {
+      fulfillOrder(o.paymentHash).catch((e) => console.error("fulfill error:", e));
+    }
+  }, POLL_MS);
 
   // Verificar conectividad: suscribirse a text notes para confirmar que llegan eventos
   let connOk = false;
@@ -357,10 +523,24 @@ async function main() {
     if (!connOk) console.log("   ⚠️  Sin eventos tras 10s — verificá la conexión a internet");
   }, 10000);
 
-  // escuchar receipts dirigidos a CUALQUIER destinatario relevante:
-  // - al issuer (open-pack)
-  // - a vendedores (buy-sticker) — filtramos por figus-action dentro del request
-  console.log("   Escuchando zap receipts (kind 9735)…");
+  // Órdenes de compra (sobres y mercado) — el issuer emite y cobra la factura.
+  console.log("   Escuchando order requests (kind 1583)…");
+  pool.subscribeMany(
+    RELAYS,
+    { kinds: [KIND.ORDER_REQUEST], since: now() - 120 },
+    { onevent: (ev) => handleOrderRequest(ev).catch(console.error) }
+  );
+
+  // Sobre gratis (Fix #5) — concedido una vez por pubkey por el issuer.
+  console.log("   Escuchando free-pack claims (kind 30110)…");
+  pool.subscribeMany(
+    RELAYS,
+    { kinds: [KIND.FREE_PACK_CLAIM], since: now() - 300 },
+    { onevent: (ev) => handleFreePack(ev).catch(console.error) }
+  );
+
+  // Receipts de zap — ya SOLO para bet-lock (sobres/compras van por órdenes).
+  console.log("   Escuchando zap receipts (kind 9735) para bets…");
   pool.subscribeMany(
     RELAYS,
     { kinds: [KIND.ZAP_RECEIPT], since: now() - 60 },
