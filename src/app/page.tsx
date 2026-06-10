@@ -7,7 +7,7 @@ import { useGameState } from "@/hooks/useGameState";
 import { useOpenMatches, useHasMyTurn, createMatch } from "@/hooks/usePenaltyMatch";
 import { Connect } from "@/components/Connect";
 import { Album } from "@/components/Album";
-import { Packs, PackReveal } from "@/components/Packs";
+import { Packs, PackReveal, type PackMark } from "@/components/Packs";
 import { Market } from "@/components/Market";
 import { MyStickers } from "@/components/MyStickers";
 import { Fixture } from "@/components/Fixture";
@@ -25,6 +25,8 @@ import { getPool, getRelays, warmupRelays } from "@/lib/pool";
 import { getNwcString, nwcPay } from "@/lib/nwc";
 import { InvoiceModal } from "@/components/InvoiceModal";
 import { SettingsModal } from "@/components/SettingsModal";
+import { DevTools, DevModeFooter } from "@/components/DevTools";
+import { StickerPlacementFX, RevealSummaryModal, type RevealResult } from "@/components/StickerPlacementFX";
 import { LangProvider, useLang } from "@/contexts/LangContext";
 import type { Listing, Page } from "@/lib/types";
 
@@ -44,8 +46,49 @@ function HomeInner() {
   const { identity, nip07Available, connectNip07, connectLocal, connectNip46QR, connectNip46Bunker, logout, importNsec } =
     useIdentity();
   const pubkey = identity?.pubkey ?? null;
-  const { ownership, listings, settlements, owned, dupes, loading, refresh, hasClaimedFreePack, claimPack, addSticker } =
+  const { ownership, listings, settlements, owned, dupes, loading, refresh, hasClaimedFreePack, claimPack, addSticker, addStickers } =
     useGameState(pubkey);
+
+  // DEV MODE: habilita herramientas de prueba locales (sin eventos Nostr).
+  const isDev = process.env.NODE_ENV === "development";
+  // Cola de figuritas pendientes de revelar con la animación de colocación.
+  const [revealQueue, setRevealQueue] = useState<number[]>([]);
+  // Pedido de foco para el álbum: salta a la página que contiene la figurita.
+  const [albumFocus, setAlbumFocus] = useState<{ num: number; token: number } | null>(null);
+  const focusToken = useRef(0);
+  // Resumen del lote al terminar la cola (modal con nuevas y repetidas).
+  const [revealSummary, setRevealSummary] = useState<RevealResult[] | null>(null);
+  // Figuritas de sobres dev a la espera del efecto de pegado (corre al cerrar el sobre).
+  const pendingPlacement = useRef<number[]>([]);
+
+  // Pasa las figuritas pendientes del sobre al efecto de pegado. Drena el ref,
+  // así llamarla dos veces es inocuo.
+  function queuePendingPlacement() {
+    if (pendingPlacement.current.length === 0) return;
+    const nums = pendingPlacement.current;
+    pendingPlacement.current = [];
+    setRevealQueue(q => (q.length ? [...q, ...nums] : nums));
+  }
+
+  // Ownership vivo, para clasificar nueva/repetida en handlers asíncronos
+  const ownershipLive = useRef(ownership);
+  ownershipLive.current = ownership;
+
+  // Baseline de clasificación: lo que ya tenés + lo que salió de sobres y aún no se pegó.
+  function packBaseline(): Record<number, number> {
+    const base: Record<number, number> = { ...ownershipLive.current };
+    for (const n of pendingPlacement.current) base[n] = (base[n] ?? 0) + 1;
+    return base;
+  }
+
+  // Clasifica secuencialmente (muta base): la primera copia es nueva, las siguientes repes.
+  function classifyPack(nums: number[], base: Record<number, number>): PackMark[] {
+    return nums.map(n => {
+      const had = base[n] ?? 0;
+      base[n] = had + 1;
+      return { isNew: had === 0, copies: had + 1 };
+    });
+  }
   const { incoming: pmIncoming, outgoing: pmOutgoing, loading: pmLoading } = useOpenMatches(pubkey);
 
   // Excluir matches que el cliente ya confirmó como terminados (localStorage) —
@@ -81,7 +124,9 @@ function HomeInner() {
   }, [pubkey]);
   const [toast, setToast] = useState<string | null>(null);
   const [packResult, setPackResult] = useState<number[] | null>(null);
-  const [packQueue, setPackQueue] = useState<number[][]>([]);
+  // Marcas (nueva/repetida ×N) alineadas con packResult
+  const [packMarks, setPackMarks] = useState<PackMark[] | null>(null);
+  const [packQueue, setPackQueue] = useState<{ figus: number[]; marks: PackMark[] }[]>([]);
   const packQueueTotal = useRef(0);
   const [penaltyPackPending, setPenaltyPackPending] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -131,6 +176,14 @@ function HomeInner() {
 
   const configured = Boolean(ISSUER_PUBKEY);
 
+  // DEV: agrega N figuritas random al álbum (solo local, no publica nada).
+  // Cada figurita se pega recién cuando su animación de colocación aterriza.
+  function addRandomFigus(count: number) {
+    if (!pubkey) return notify("Conectate primero");
+    const nums = Array.from({ length: count }, () => rollSticker());
+    setRevealQueue(q => (q.length ? [...q, ...nums] : nums));
+  }
+
   // --- sobre de regalo: publica prueba en Nostr y espera GRANT del issuer ---
   function openFreePack() {
     if (!identity) return notify("Conectate primero");
@@ -151,6 +204,7 @@ function HomeInner() {
         .filter((n) => n > 0);
       if (!nums.length) return;
       grantReceived = true;
+      setPackMarks(classifyPack(nums, packBaseline()));
       claimPack(nums);
       setPackResult(nums);
       refresh();
@@ -184,6 +238,7 @@ function HomeInner() {
         unsubGrant?.();
         if (pollIv) clearInterval(pollIv);
         const nums = Array.from({ length: 7 }, () => rollSticker());
+        setPackMarks(classifyPack(nums, packBaseline()));
         claimPack(nums);
         setPackResult(nums);
         setBusy(false);
@@ -211,6 +266,39 @@ function HomeInner() {
   // --- abrir sobre demo: genera figus localmente sin Lightning (para testear) ---
   function openPackDemo() {
     const nums = Array.from({ length: 7 }, () => rollSticker());
+    setPackMarks(null); // demo: no acredita, sin badges
+    setPackResult(nums);
+  }
+
+  // ── DEV MODE: sobres 100% locales — sin zap, sin publicar eventos Nostr ──
+  // Las figuritas NO se acreditan acá: quedan pendientes y, al cerrar el sobre,
+  // pasan por el efecto de pegado (StickerPlacementFX) que las acredita al aterrizar.
+  function openPackDev() {
+    const nums = Array.from({ length: 7 }, () => rollSticker());
+    const marks = classifyPack(nums, packBaseline());
+    pendingPlacement.current = [...pendingPlacement.current, ...nums];
+    setPackMarks(marks);
+    setPackResult(nums);
+  }
+
+  function openPackBulkDev() {
+    const nums = Array.from({ length: 70 }, () => rollSticker());
+    const marks = classifyPack(nums, packBaseline());
+    pendingPlacement.current = [...pendingPlacement.current, ...nums];
+    const chunks: { figus: number[]; marks: PackMark[] }[] = [];
+    for (let i = 0; i < nums.length; i += 7) {
+      chunks.push({ figus: nums.slice(i, i + 7), marks: marks.slice(i, i + 7) });
+    }
+    packQueueTotal.current = chunks.length;
+    setPackQueue(chunks);
+  }
+
+  function openFreePackDev() {
+    const nums = Array.from({ length: 7 }, () => rollSticker());
+    const marks = classifyPack(nums, packBaseline());
+    claimPack([]); // marca el regalo como usado; acredita el FX al pegar cada una
+    pendingPlacement.current = [...pendingPlacement.current, ...nums];
+    setPackMarks(marks);
     setPackResult(nums);
   }
 
@@ -236,6 +324,7 @@ function HomeInner() {
       if (!nums.length) return;
       grantReceived = true;
       setInvoice(null);
+      setPackMarks(classifyPack(nums, packBaseline()));
       setPackResult(nums);
       refresh();
       unsubGrant?.();
@@ -348,9 +437,12 @@ function HomeInner() {
       if (!nums.length) return;
       grantReceived = true;
       setInvoice(null);
+      const marks = classifyPack(nums, packBaseline());
       claimPack(nums);
-      const chunks: number[][] = [];
-      for (let i = 0; i < nums.length; i += 7) chunks.push(nums.slice(i, i + 7));
+      const chunks: { figus: number[]; marks: PackMark[] }[] = [];
+      for (let i = 0; i < nums.length; i += 7) {
+        chunks.push({ figus: nums.slice(i, i + 7), marks: marks.slice(i, i + 7) });
+      }
       packQueueTotal.current = chunks.length;
       setPackQueue(chunks);
       refresh();
@@ -653,7 +745,7 @@ function HomeInner() {
   );
 
   return (
-    <div style={{ paddingBottom: 40 }}>
+    <div style={{ paddingBottom: isDev ? 72 : 40 }}>
       {/* HEADER */}
       <header
         style={{
@@ -820,6 +912,9 @@ function HomeInner() {
             ))}
           </nav>
 
+          {/* DEV TOOLS (solo en development) */}
+          {isDev && <DevTools onAddRandom={addRandomFigus} />}
+
           {/* progress */}
           <div
             style={{
@@ -933,20 +1028,21 @@ function HomeInner() {
                   claimedPages={claimedPages}
                   myListings={listings.filter(l => l.seller === pubkey)}
                   identity={identity ?? undefined}
+                  focusSticker={albumFocus}
                 />
               </div>
             )}
             {visitedTabs.has("packs") && (
               <div style={{ display: tab === "packs" ? undefined : "none" }}>
                 <Packs
-                  onOpen={openPack}
-                  onOpenBulk={openPackBulk}
+                  onOpen={isDev ? openPackDev : openPack}
+                  onOpenBulk={isDev ? openPackBulkDev : openPackBulk}
                   onDemo={openPackDemo}
                   onCancel={() => setBusy(false)}
                   busy={busy}
                   freePack={{
                     available: !!pubkey && !hasClaimedFreePack,
-                    onOpen: openFreePack,
+                    onOpen: isDev ? openFreePackDev : openFreePack,
                   }}
                 />
                 <MyStickers ownership={ownership} onSell={listForSale} myListings={listings.filter(l => l.seller === pubkey)} />
@@ -969,7 +1065,7 @@ function HomeInner() {
                   <>
                     <PenaltyGame
                       pubkey={pubkey}
-                      onGoal={() => { setPenaltyPackPending(true); openFreePack(); }}
+                      onGoal={() => { setPenaltyPackPending(true); (isDev ? openFreePackDev : openFreePack)(); }}
                       onPublish={publishPenalty}
                       packPending={penaltyPackPending}
                     />
@@ -1064,14 +1160,63 @@ function HomeInner() {
         />
       )}
 
+      {/* Revelado espectacular de figuritas nuevas (dev tools) */}
+      {revealQueue.length > 0 && (
+        <StickerPlacementFX
+          queue={revealQueue}
+          ownership={ownership}
+          onNavigate={(num) => {
+            setTab("album");
+            // El efecto [tab] no re-corre si ya estábamos en album — sincronizar igual.
+            if (window.location.hash !== "#album") window.location.hash = "album";
+            setAlbumFocus({ num, token: ++focusToken.current });
+          }}
+          onPlace={addSticker}
+          onPlaceMany={addStickers}
+          onFinish={(results) => {
+            setRevealQueue([]);
+            setAlbumFocus(null);
+            setRevealSummary(results);
+          }}
+        />
+      )}
+
+      {/* Modal resumen del lote (nuevas vs repetidas) */}
+      {revealSummary && (
+        <RevealSummaryModal
+          results={revealSummary}
+          ownership={ownership}
+          onClose={() => setRevealSummary(null)}
+          onBuyMore={() => {
+            setRevealSummary(null);
+            setTab("packs");
+            if (window.location.hash !== "#packs") window.location.hash = "packs";
+          }}
+        />
+      )}
+
       {packResult && (
-        <PackReveal figus={packResult} onClose={() => setPackResult(null)} identity={identity ?? undefined} />
+        <PackReveal
+          figus={packResult}
+          marks={packMarks ?? undefined}
+          onClose={() => { setPackResult(null); setPackMarks(null); queuePendingPlacement(); }}
+          identity={identity ?? undefined}
+        />
       )}
 
       {packQueue.length > 0 && (
         <PackReveal
-          figus={packQueue[0]}
-          onClose={() => setPackQueue(q => q.slice(1))}
+          figus={packQueue[0].figus}
+          marks={packQueue[0].marks}
+          onClose={() => {
+            const isLast = packQueue.length === 1;
+            setPackQueue(q => q.slice(1));
+            if (isLast) queuePendingPlacement(); // el efecto corre tras el último sobre
+          }}
+          onSkipAll={() => {
+            setPackQueue([]);
+            queuePendingPlacement();
+          }}
           identity={identity ?? undefined}
           packIndex={packQueueTotal.current - packQueue.length + 1}
           totalPacks={packQueueTotal.current}
@@ -1150,6 +1295,9 @@ function HomeInner() {
       >
         © 2026 Figus · Nostr + Lightning · Open source
       </footer>
+
+      {/* DEV MODE: banner fijo full-width (solo en development) */}
+      {isDev && <DevModeFooter />}
     </div>
   );
 }

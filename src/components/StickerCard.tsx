@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { CATALOG, RARITY_META, TEAMS, FWC_CHAMPION_TEAMS, FWC_IMAGE_STICKERS } from "@/lib/catalog";
 import { Flag } from "./Flag";
+import FACES from "@/lib/faces-manifest.json";
 
 // ─── Derive sticker metadata ──────────────────────────────────────────────────
 
@@ -324,10 +325,11 @@ function Silhouette({ type, light }: { type: string; light: boolean }) {
 }
 
 // ─── Squad image with fallback chain ─────────────────────────────────────────
-// Tries: /squad-{team}.png → /squad.png → SVG silhouette
+// Tries: /faces/{team}/13.jpg (foto real del plantel) → /squad-{team}.png → /squad.png → SVG
 
 function SquadImage({ team, light }: { team: string; light: boolean }) {
-  const [src, setSrc] = useState(`/squad-${team}.png`);
+  const hasRealPhoto = ((FACES as Record<string, number[]>)[team] ?? []).includes(13);
+  const [src, setSrc] = useState(hasRealPhoto ? `/faces/${team}/13.jpg` : `/squad-${team}.png`);
   const [useSvg, setUseSvg] = useState(false);
 
   if (useSvg) return <Silhouette type="squad" light={light} />;
@@ -337,7 +339,8 @@ function SquadImage({ team, light }: { team: string; light: boolean }) {
       src={src}
       alt=""
       onError={() => {
-        if (!src.endsWith("/squad.png")) setSrc("/squad.png");
+        if (src.startsWith("/faces/")) setSrc(`/squad-${team}.png`);
+        else if (!src.endsWith("/squad.png")) setSrc("/squad.png");
         else setUseSvg(true);
       }}
       style={{
@@ -408,6 +411,12 @@ export function StickerFace({
   // For champion stickers, load ostrich from the mapped country
   const ostrichTeam = sType === "champion" ? (championCode ?? s.team) : s.team;
 
+  // Real player face downloaded by scripts/fetch-faces.ts (manifest = positions on disk)
+  const facePos = teamPos(num);
+  const hasFace =
+    num > 20 && facePos !== null &&
+    ((FACES as Record<string, number[]>)[s.team] ?? []).includes(facePos);
+
   return (
     <div className="sticker-card">
 
@@ -461,6 +470,22 @@ export function StickerFace({
                 objectFit: "cover",
                 objectPosition: "center 5%",
                 mixBlendMode: "multiply",
+                display: "block",
+              }}
+            />
+          ) : hasFace ? (
+            // No mixBlendMode: real photos must not be tinted by the gradient
+            <img
+              src={`/faces/${s.team}/${facePos}.jpg`}
+              alt=""
+              onError={(e) => {
+                e.currentTarget.src = `/ostrich-${ostrichTeam}.png`;
+              }}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                objectPosition: "center 20%",
                 display: "block",
               }}
             />

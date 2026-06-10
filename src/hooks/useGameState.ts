@@ -274,5 +274,21 @@ export function useGameState(pubkey: string | null) {
     } catch {}
   }, [pubkey]);
 
-  return { ownership, listings, settlements, owned, dupes, loading, refresh, albumId: ALBUM_ID, hasClaimedFreePack, claimPack, addSticker };
+  // Agrega varias figuritas de una, todo local (sin eventos Nostr).
+  // Batchea el write a localStorage y un único setState para no re-renderizar N veces.
+  const addStickers = useCallback((nums: number[]) => {
+    if (!pubkey || nums.length === 0) return;
+    try {
+      const local = readLocalOwn(pubkey);
+      for (const n of nums) local[n] = (local[n] ?? 0) + 1;
+      writeLocalOwn(pubkey, local);
+      setOwnership(prev => {
+        const next = { ...prev };
+        for (const n of nums) next[n] = (next[n] ?? 0) + 1;
+        return next;
+      });
+    } catch {}
+  }, [pubkey]);
+
+  return { ownership, listings, settlements, owned, dupes, loading, refresh, albumId: ALBUM_ID, hasClaimedFreePack, claimPack, addSticker, addStickers };
 }
