@@ -26,51 +26,50 @@ export function useOpenMatches(myPubkey: string | null) {
     if (!myPubkey) { setLoading(false); return; }
     let cancelled = false;
 
-    const parseAll = (evs: Event[]) => {
-      const latest = new Map<string, Event>();
+    // Cache local de eventos: evita volver a consultar relays en cada suscripción.
+    // Clave = "pubkey:d" → solo guardamos el evento más reciente por partida.
+    const evCache = new Map<string, Event>();
+
+    function ingestAndSetState(evs: Event[]) {
       for (const ev of evs) {
         const d = ev.tags.find(t => t[0] === "d")?.[1];
         if (!d) continue;
         const key = `${ev.pubkey}:${d}`;
-        const prev = latest.get(key);
-        if (!prev || ev.created_at > prev.created_at) latest.set(key, ev);
+        const prev = evCache.get(key);
+        if (!prev || ev.created_at > prev.created_at) evCache.set(key, ev);
       }
-      return Array.from(latest.values())
+      const all = Array.from(evCache.values())
         .map(parseMatch)
         .filter((m): m is PenaltyMatch => m !== null && m.status === "open");
-    };
+      setIncoming(all.filter(m => m.challenged === myPubkey));
+      setOutgoing(all.filter(m => m.challenger === myPubkey));
+    }
 
     // Solo partidas de los últimos 60 días — evita traer eventos históricos indefinidamente
     const since = Math.floor(Date.now() / 1000) - 60 * 24 * 3600;
 
     (async () => {
       setLoading(true);
+      // 4000ms: los relays lentos tardan hasta 2-3s — no cortamos antes de que respondan.
       const [recv, sent] = await Promise.all([
-        list([{ kinds: [KIND.PENALTY_MATCH], "#p": [myPubkey], since }]),
-        list([{ kinds: [KIND.PENALTY_MATCH], authors: [myPubkey], since }]),
+        list([{ kinds: [KIND.PENALTY_MATCH], "#p": [myPubkey], since }], 4000),
+        list([{ kinds: [KIND.PENALTY_MATCH], authors: [myPubkey], since }], 4000),
       ]);
       if (!cancelled) {
-        setIncoming(parseAll(recv));
-        setOutgoing(parseAll(sent));
+        ingestAndSetState([...recv, ...sent]);
         setLoading(false);
       }
     })();
 
+    // Suscripción viva: cuando llega un nuevo evento lo ingesta directo en el cache
+    // sin volver a consultar relays (ahorra una round-trip de 4s por evento).
     const unsub = subscribe(
       [
         { kinds: [KIND.PENALTY_MATCH], "#p": [myPubkey], since },
         { kinds: [KIND.PENALTY_MATCH], authors: [myPubkey], since },
       ],
-      () => {
-        Promise.all([
-          list([{ kinds: [KIND.PENALTY_MATCH], "#p": [myPubkey], since }]),
-          list([{ kinds: [KIND.PENALTY_MATCH], authors: [myPubkey], since }]),
-        ]).then(([recv, sent]) => {
-          if (!cancelled) {
-            setIncoming(parseAll(recv));
-            setOutgoing(parseAll(sent));
-          }
-        });
+      (ev) => {
+        if (!cancelled) ingestAndSetState([ev]);
       }
     );
 
@@ -114,9 +113,10 @@ export function usePenaltyMatch(
     const since = match.createdAt - 60;
 
     (async () => {
+      // 4000ms: misma paciencia que el leaderboard — relays lentos tardan ~2-3s.
       const evs = await list([
         { kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": [coord], since },
-      ]);
+      ], 4000);
       if (cancelled) return;
       for (const ev of evs) ingestEvent(ev, match, commitsRef, blocksRef, revealsRef);
       rebuild(match);
@@ -299,7 +299,7 @@ export async function cancelMatch(identity: Identity, match: PenaltyMatch): Prom
 
 function ingestEvent(
   ev: Event,
-  match: PenaltyMatch,
+  _match: PenaltyMatch,
   commitsRef: React.MutableRefObject<PenaltyCommit[]>,
   blocksRef:  React.MutableRefObject<PenaltyBlock[]>,
   revealsRef: React.MutableRefObject<PenaltyReveal[]>,
@@ -354,21 +354,32 @@ export function useTurnMap(
       );
     }
 
-    async function check() {
-      if (cancelled) return;
-      const evs = await list([
-        { kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": coords, since },
-      ]);
-      if (cancelled) return;
+    // Cache local de eventos de turno: evita round-trip a relays en cada suscripción.
+    const evsCache = new Map<string, Event>();
+
+    function recalcTurnMap() {
+      const all = Array.from(evsCache.values());
       const next = new Map<string, boolean | null>();
-      for (const m of allMatches) next.set(m.id, turnFor(m, evs));
+      for (const m of allMatches) next.set(m.id, turnFor(m, all));
       setTurnMap(next);
     }
 
-    check();
+    (async () => {
+      if (cancelled) return;
+      // 4000ms: igual que leaderboard y usePenaltyMatch.
+      const evs = await list([
+        { kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": coords, since },
+      ], 4000);
+      if (cancelled) return;
+      for (const ev of evs) evsCache.set(ev.id, ev);
+      recalcTurnMap();
+    })();
+
     const unsub = subscribe(
       [{ kinds: [KIND.PENALTY_COMMIT, KIND.PENALTY_BLOCK, KIND.PENALTY_REVEAL], "#a": coords, since }],
-      () => check(),
+      (ev) => {
+        if (!cancelled) { evsCache.set(ev.id, ev); recalcTurnMap(); }
+      },
     );
     return () => { cancelled = true; unsub(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
