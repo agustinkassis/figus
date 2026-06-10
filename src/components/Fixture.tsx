@@ -61,10 +61,11 @@ function getSchedule(group: string, mdIdx: number, matchIdx: number): ScheduleIn
   } else {
     date = MD3_DATES[gIdx]; utcH = MD3_UTC_HOURS[gIdx % 3]; simultaneous = true;
   }
-  const artH = utcH - 3;
+  const artH = utcH;          // stored values are ART (Argentina) times
+  const utcH2 = utcH + 3;    // UTC = ART + 3  (Argentina is UTC-3)
   return {
     date,
-    utc: `${String(utcH).padStart(2,"0")}:00`,
+    utc: `${String(utcH2).padStart(2,"0")}:00`,
     art: `${String(artH).padStart(2,"0")}:00`,
     simultaneous,
   };
@@ -293,7 +294,7 @@ function GroupView({
               const schedule = getSchedule(group, mdIdx, matchIdx);
               return (
                 <MatchRow
-                  key={matchIdx}
+                  key={matchId}
                   teamA={teamA} teamB={teamB}
                   nameA={teamName(teamA, lang)} nameB={teamName(teamB, lang)}
                   matchId={matchId} schedule={schedule}
@@ -329,7 +330,13 @@ function MatchRow({
   const [awayVal, setAwayVal] = useState("");
 
   useEffect(() => {
-    if (myProno) { setHomeVal(String(myProno.home)); setAwayVal(String(myProno.away)); }
+    if (myProno) {
+      setHomeVal(String(myProno.home));
+      setAwayVal(String(myProno.away));
+    } else {
+      setHomeVal("");
+      setAwayVal("");
+    }
   }, [myProno?.home, myProno?.away]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const count = pronos.size;
@@ -344,7 +351,6 @@ function MatchRow({
 
   return (
     <div style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 12, overflow: "hidden" }}>
-      {/* Schedule bar */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 12px", background: "var(--panel2)", borderBottom: "1px solid var(--line)" }}>
         <span style={{ fontFamily: "var(--condensed)", fontSize: 10, color: "var(--muted)", fontWeight: 700 }}>📅 {schedule.date}</span>
         <span style={{ fontFamily: "var(--condensed)", fontSize: 10, color: "var(--ink)", letterSpacing: 0.3 }}>
@@ -471,8 +477,9 @@ function KoMatchRow({
 
   const count = pronos.size;
   const isDirty = myProno === null || homeVal !== String(myProno.home) || awayVal !== String(myProno.away);
-  const artH = match.utcH - 3;
-  const utc = `${String(match.utcH).padStart(2,"0")}:00`;
+  const artH = match.utcH;        // stored values are ART times
+  const utcH2 = match.utcH + 3;  // UTC = ART + 3
+  const utc = `${String(utcH2).padStart(2,"0")}:00`;
   const art = `${String(artH).padStart(2,"0")}:00`;
 
   const handleSave = async () => {
