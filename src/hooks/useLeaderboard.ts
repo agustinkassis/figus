@@ -30,28 +30,37 @@ export function useLeaderboard(enabled: boolean): { entries: LeaderEntry[]; load
     setEntries([]);
 
     async function load() {
-      // Ownership: única query necesaria para el ranking.
-      // maxWait 4000ms: estos relays tardan hasta 2.3s — no los cortamos antes de que respondan.
-      const ownEvents = await list([{ kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY] }], 8000);
+      // Paso 1: query de descubrimiento — trae hasta 500 eventos para extraer
+      // los pubkeys de todos los jugadores activos. No importa si está incompleto,
+      // solo necesitamos saber quiénes juegan.
+      const discoveryEvents = await list(
+        [{ kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY], limit: 500 }],
+        6000
+      );
       if (cancelled) return;
 
-      // Agrupar ownership por pubkey de jugador (#p tag)
-      const byPubkey: Record<string, typeof ownEvents> = {};
-      for (const ev of ownEvents) {
-        const p = ev.tags.find(t => t[0] === "p")?.[1];
-        if (p) {
-          if (!byPubkey[p]) byPubkey[p] = [];
-          byPubkey[p].push(ev);
-        }
-      }
-
-      const pubkeys = Object.keys(byPubkey);
+      const pubkeys = [
+        ...new Set(
+          discoveryEvents
+            .map(ev => ev.tags.find(t => t[0] === "p")?.[1])
+            .filter((p): p is string => !!p)
+        ),
+      ];
       if (!pubkeys.length) { setLoading(false); return; }
 
+      // Paso 2: query individual por jugador — igual a lo que hace el álbum.
+      // Así cada jugador tiene su propio query sin competir por el límite del relay.
+      const perPlayerEvents = await Promise.all(
+        pubkeys.map(pk =>
+          list([{ kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY], "#p": [pk] }], 6000)
+        )
+      );
+      if (cancelled) return;
+
       const stickerCounts: Record<string, number> = {};
-      for (const pk of pubkeys) {
-        const own = parseOwnership(byPubkey[pk]);
-        stickerCounts[pk] = ALL_NUMBERS.filter(n => (own[n] ?? 0) > 0).length;
+      for (let i = 0; i < pubkeys.length; i++) {
+        const own = parseOwnership(perPlayerEvents[i]);
+        stickerCounts[pubkeys[i]] = ALL_NUMBERS.filter(n => (own[n] ?? 0) > 0).length;
       }
 
       // 3. Perfiles (en paralelo con el procesamiento anterior ya terminó)
