@@ -188,7 +188,7 @@ export function Market({
             </div>
           )}
 
-          <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
+          <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(3, 1fr)" }}>
             {others.length === 0 && (
               <p style={{ opacity: 0.5, gridColumn: "1 / -1" }}>{t.market_no_offers}</p>
             )}
