@@ -6598,11 +6598,11 @@
   },
   "swe:2": {
     "name": "Victor Johansson",
-    "status": "missing",
-    "source": null,
-    "sourceUrl": null,
-    "candidates": 0,
-    "nationalityMatch": false
+    "status": "ok",
+    "source": "override",
+    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/0/0a/Viktor_Johansson_20092025_%288%29.jpg",
+    "candidates": 1,
+    "nationalityMatch": true
   },
   "swe:20": {
     "name": "Viktor Gyökeres",
@@ -6672,29 +6672,26 @@
   "tun:10": {
     "name": "Aissa Laidouni",
     "status": "ok",
-    "source": "wikipedia",
-    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/0/04/Attaque_de_football_%28cropped%29.jpg",
-    "candidates": 3,
-    "nationalityMatch": true,
-    "note": "Tunisian footballer (born 1996)"
+    "source": "thesportsdb",
+    "sourceUrl": "https://r2.thesportsdb.com/images/media/player/thumb/7qwtcr1652982851.jpg",
+    "candidates": 1,
+    "nationalityMatch": true
   },
   "tun:11": {
     "name": "Ferjani Sassi",
     "status": "ok",
-    "source": "wikipedia",
-    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/4/49/Ferjani_Sassi_2.jpg",
-    "candidates": 3,
-    "nationalityMatch": true,
-    "note": "Tunisian footballer (born 1992)"
+    "source": "thesportsdb",
+    "sourceUrl": "https://r2.thesportsdb.com/images/media/player/thumb/c9d02g1668860987.jpg",
+    "candidates": 1,
+    "nationalityMatch": true
   },
   "tun:12": {
     "name": "Mohamed Ali Ben Romdhane",
     "status": "ok",
-    "source": "wikipedia",
-    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/Mohamed_Ali_Ben_Romdhane.jpg/960px-Mohamed_Ali_Ben_Romdhane.jpg",
-    "candidates": 3,
-    "nationalityMatch": true,
-    "note": "Tunisian footballer (born 1999)"
+    "source": "thesportsdb",
+    "sourceUrl": "https://r2.thesportsdb.com/images/media/player/thumb/ly6v491668860877.jpg",
+    "candidates": 1,
+    "nationalityMatch": true
   },
   "tun:13": {
     "name": "Foto del equipo",
@@ -6708,11 +6705,10 @@
   "tun:14": {
     "name": "Hannibal Mejbri",
     "status": "ok",
-    "source": "wikipedia",
-    "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Hannibal_Mejbri_26042025_%281%29.jpg/960px-Hannibal_Mejbri_26042025_%281%29.jpg",
-    "candidates": 3,
-    "nationalityMatch": true,
-    "note": "French-born Tunisian footballer (born 2003)"
+    "source": "thesportsdb",
+    "sourceUrl": "https://www.thesportsdb.com/images/media/player/thumb/ohzt131778975550.jpg",
+    "candidates": 1,
+    "nationalityMatch": true
   },
   "tun:15": {
     "name": "Elias Achouri",
@@ -6748,12 +6744,11 @@
   },
   "tun:19": {
     "name": "Sayfallah Ltaief",
-    "status": "low_confidence",
-    "source": "thesportsdb",
-    "sourceUrl": "https://r2.thesportsdb.com/images/media/player/thumb/9zkfsd1723052557.jpg",
+    "status": "ok",
+    "source": "override",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Sayfallah_Ltaief.jpg?width=600",
     "candidates": 1,
-    "nationalityMatch": false,
-    "note": "nacionalidad API: Switzerland"
+    "nationalityMatch": true
   },
   "tun:2": {
     "name": "Bechir Ben Said",
