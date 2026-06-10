@@ -18,22 +18,16 @@ import type { PenaltyMatch } from "@/lib/penalty";
 import { ALL_NUMBERS, rollSticker, CATALOG, RARITY_META } from "@/lib/catalog";
 import { StickerFace } from "@/components/StickerCard";
 import { ISSUER_PUBKEY, KIND, ALBUM_ID, addr } from "@/lib/constants";
-import { zap } from "@/lib/zap";
+import { requestOrderInvoice, tryPayInvoice } from "@/lib/order";
 import { subscribeOne } from "@/lib/pool";
 import { signEvent } from "@/lib/identity";
 import { getPool, getRelays, warmupRelays } from "@/lib/pool";
-import { getNwcString, nwcPay } from "@/lib/nwc";
 import { InvoiceModal } from "@/components/InvoiceModal";
 import { SettingsModal } from "@/components/SettingsModal";
 import { DevTools, DevModeFooter } from "@/components/DevTools";
 import { StickerPlacementFX, RevealSummaryModal, type RevealResult } from "@/components/StickerPlacementFX";
 import { LangProvider, useLang } from "@/contexts/LangContext";
 import type { Listing, Page } from "@/lib/types";
-
-// Lightning Address del issuer (para zaps de apertura de sobre y premios).
-// En producción viene de la config; acá la dejamos visible para la demo.
-const ISSUER_LN_ADDRESS =
-  process.env.NEXT_PUBLIC_ISSUER_LN_ADDRESS || "issuer@getalby.com";
 
 type Tab = "album" | "packs" | "market" | "fixture" | "game";
 
@@ -356,47 +350,25 @@ function HomeInner() {
     }, 90000);
 
     try {
-      // Race contra timeout de 45s: signEvent con Amber puede quedar colgado
-      // si el usuario no aprueba la firma en el teléfono.
-      const zapPromise = zap(
-        {
-          amountSats: 21,
-          target: { pubkey: ISSUER_PUBKEY, lnurlOrAddress: ISSUER_LN_ADDRESS },
-          extraTags: [
-            ["a", addr(KIND.PACK, ISSUER_PUBKEY, "pack-basico")],
-            ["figus-action", "open-pack"],
-          ],
-          comment: "Abriendo sobre clásico",
+      // El issuer emite la factura y la cobra (Fix #1). Race de 25s por si Amber
+      // cuelga la firma del ORDER_REQUEST.
+      const { invoice } = await Promise.race([
+        requestOrderInvoice({
+          action: "open-pack",
+          extraTags: [["a", addr(KIND.PACK, ISSUER_PUBKEY, "pack-basico")]],
           signerMode: identity.mode,
-        },
-        () => {
-          setInvoice(null);
-          notify("⚡ Pago confirmado — esperando figus del issuer…");
-        }
-      );
-      const res = await Promise.race([
-        zapPromise,
+        }),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Tiempo de firma agotado — si usás Amber, abrilo y aprobá la firma")), 20_000)
+          setTimeout(() => reject(new Error("Tiempo de firma agotado — si usás Amber, abrilo y aprobá la firma")), 25_000)
         ),
       ]);
-      if (!res.paid) {
-        const nwcStr = getNwcString();
-        if (nwcStr) {
-          // Intentar NWC con timeout de 12s — si cuelga, mostrar factura
-          const nwcTimeout = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("NWC timeout")), 12000)
-          );
-          try {
-            await Promise.race([nwcPay(res.invoice, nwcStr), nwcTimeout]);
-            notify("⚡ Solicitud enviada a tu wallet NWC — esperando figus…");
-          } catch {
-            setInvoice(res.invoice);
-          }
-        } else {
-          setInvoiceAmount(21);
-          setInvoice(res.invoice);
-        }
+      const paid = await tryPayInvoice(invoice);
+      if (paid) {
+        setInvoice(null);
+        notify("⚡ Pago enviado — esperando figus del issuer…");
+      } else {
+        setInvoiceAmount(21);
+        setInvoice(invoice);
       }
     } catch (e: any) {
       grantReceived = true;
@@ -470,44 +442,23 @@ function HomeInner() {
     }, 90000);
 
     try {
-      const zapPromise = zap(
-        {
-          amountSats: 189,
-          target: { pubkey: ISSUER_PUBKEY, lnurlOrAddress: ISSUER_LN_ADDRESS },
-          extraTags: [
-            ["a", addr(KIND.PACK, ISSUER_PUBKEY, "pack-basico")],
-            ["figus-action", "open-pack-10"],
-          ],
-          comment: "Abriendo caja de 10 sobres",
+      const { invoice } = await Promise.race([
+        requestOrderInvoice({
+          action: "open-pack-10",
+          extraTags: [["a", addr(KIND.PACK, ISSUER_PUBKEY, "pack-basico")]],
           signerMode: identity.mode,
-        },
-        () => {
-          setInvoice(null);
-          notify("⚡ Pago confirmado — esperando figus del issuer…");
-        }
-      );
-      const res = await Promise.race([
-        zapPromise,
+        }),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Tiempo de firma agotado — si usás Amber, abrilo y aprobá la firma")), 20_000)
+          setTimeout(() => reject(new Error("Tiempo de firma agotado — si usás Amber, abrilo y aprobá la firma")), 25_000)
         ),
       ]);
-      if (!res.paid) {
-        const nwcStr = getNwcString();
-        if (nwcStr) {
-          const nwcTimeout = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("NWC timeout")), 12000)
-          );
-          try {
-            await Promise.race([nwcPay(res.invoice, nwcStr), nwcTimeout]);
-            notify("⚡ Solicitud enviada a tu wallet NWC — esperando figus…");
-          } catch {
-            setInvoice(res.invoice);
-          }
-        } else {
-          setInvoiceAmount(189);
-          setInvoice(res.invoice);
-        }
+      const paid = await tryPayInvoice(invoice);
+      if (paid) {
+        setInvoice(null);
+        notify("⚡ Pago enviado — esperando figus del issuer…");
+      } else {
+        setInvoiceAmount(189);
+        setInvoice(invoice);
       }
     } catch (e: any) {
       grantReceived = true;
@@ -632,44 +583,23 @@ function HomeInner() {
     }
   }
 
-  // --- comprar: zap directo al vendedor ---
+  // --- comprar: pago al ISSUER (escrow), que valida y transfiere (Fix #1/#4) ---
   async function buyListing(listing: Listing) {
     if (!identity) return notify("Conectate primero");
+    if (listing.seller === pubkey) return notify("No podés comprar tu propia figurita");
     setBusy(true);
     // Reset delivery guards for this new purchase attempt
     invoiceListing.current = listing;
     buyDelivered.current   = false;
     try {
-      const sellerLn = await resolveSellerLnAddress(listing.seller);
-      const zapPromise = zap(
-        {
-          amountSats: listing.price,
-          target: { pubkey: listing.seller, lnurlOrAddress: sellerLn },
-          extraTags: [
-            ["a", addr(KIND.LISTING, listing.seller, listing.d)],
-            ["figus-action", "buy-sticker"],
-          ],
-          comment: `Compro #${listing.stickerNum}`,
+      // El issuer valida que el vendedor tenga la figu y emite la factura; al cobrarla
+      // transfiere la propiedad y paga al vendedor (menos fee). Race de 25s por Amber.
+      const { invoice } = await Promise.race([
+        requestOrderInvoice({
+          action: "buy-sticker",
+          extraTags: [["a", addr(KIND.LISTING, listing.seller, listing.d)]],
           signerMode: identity.mode,
-        },
-        () => {
-          // ZAP_RECEIPT confirmed — deliver sticker only if not already done via NWC
-          if (!buyDelivered.current) {
-            buyDelivered.current = true;
-            addSticker(listing.stickerNum);
-            notify(`✅ ¡Pago confirmado! La #${listing.stickerNum} fue acreditada a tu álbum`);
-            setTimeout(refresh, 3000);
-          }
-          // Always hide the listing locally (SETTLEMENT from ISSUER may be slow/absent)
-          setLocallyRemovedListings(prev =>
-            prev.includes(listing.id) ? prev : [...prev, listing.id]
-          );
-          setInvoice(null);
-        }
-      );
-      // Race against 25s timeout — prevents hanging when Amber/NIP-46 doesn't respond
-      const res = await Promise.race([
-        zapPromise,
+        }),
         new Promise<never>((_, reject) =>
           setTimeout(
             () => reject(new Error("Tiempo de firma agotado. Si usás Amber, abrilo y aprobá la firma.")),
@@ -677,9 +607,21 @@ function HomeInner() {
           )
         ),
       ]);
-      if (!res.paid) {
+      const paid = await tryPayInvoice(invoice);
+      if (paid) {
+        if (!buyDelivered.current) {
+          buyDelivered.current = true;
+          addSticker(listing.stickerNum);
+          notify(`✅ ¡Pago enviado! La #${listing.stickerNum} fue acreditada a tu álbum`);
+          setTimeout(refresh, 3000);
+        }
+        setLocallyRemovedListings(prev =>
+          prev.includes(listing.id) ? prev : [...prev, listing.id]
+        );
+        setInvoice(null);
+      } else {
         setInvoiceAmount(listing.price);
-        setInvoice(res.invoice);
+        setInvoice(invoice);
       }
     } catch (e: any) {
       notify("⚠️ " + (e.message || "Error en la compra"));
@@ -1815,17 +1757,3 @@ function MarketDemoSection() {
 }
 
 // Resuelve la Lightning Address (lud16) del perfil kind:0 del vendedor
-async function resolveSellerLnAddress(pubkey: string): Promise<string> {
-  const { list } = await import("@/lib/pool");
-  const metas = await list([{ kinds: [0], authors: [pubkey] }]);
-  if (metas.length === 0) throw new Error("El vendedor no tiene perfil con Lightning Address");
-  const meta = metas.sort((a, b) => b.created_at - a.created_at)[0];
-  try {
-    const profile = JSON.parse(meta.content);
-    const ln = profile.lud16 || profile.lightning_address;
-    if (!ln) throw new Error("El vendedor no publicó lud16 en su perfil");
-    return ln;
-  } catch {
-    throw new Error("No se pudo leer el perfil del vendedor");
-  }
-}

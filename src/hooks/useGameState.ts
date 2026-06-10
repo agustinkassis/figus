@@ -9,6 +9,7 @@ import {
   parseOwnership,
   parseSettlement,
 } from "@/lib/parsers";
+import { onlyFromIssuer, isSelfSigned } from "@/lib/verify";
 import type { Listing, Ownership, Settlement } from "@/lib/types";
 import { ALL_NUMBERS } from "@/lib/catalog";
 
@@ -119,8 +120,11 @@ export function useGameState(pubkey: string | null) {
           list([{ kinds: [KIND.FREE_PACK_CLAIM], authors: [pubkey], "#d": [`free-pack:${ALBUM_ID}`] }]),
         ]);
         if (!cancelled) {
-          ownEvents.current = owns;
-          const claimed = grants.length > 0 || freeClaims.length > 0 || isLocalClaimed(pubkey);
+          // Solo confiamos en eventos con firma válida del issuer (Fix #3).
+          ownEvents.current = onlyFromIssuer(owns);
+          const validGrants = onlyFromIssuer(grants);
+          const validFreeClaims = freeClaims.filter(isSelfSigned);
+          const claimed = validGrants.length > 0 || validFreeClaims.length > 0 || isLocalClaimed(pubkey);
           setHasClaimedFreePack(claimed);
           if (claimed) {
             try { localStorage.setItem(claimedKey(pubkey), "1"); } catch {}
@@ -136,14 +140,16 @@ export function useGameState(pubkey: string | null) {
       ]);
 
       if (!cancelled) {
-        const parsedSt = st.map(parseSettlement).filter((s): s is Settlement => s !== null);
+        // Settlements: solo los firmados por el issuer (Fix #3).
+        const parsedSt = onlyFromIssuer(st).map(parseSettlement).filter((s): s is Settlement => s !== null);
 
         // Populate settled pairs BEFORE setting listings so the filter is ready.
         settledPairs.current = parsedSt.map(s => ({ from: s.from, stickerNum: s.stickerNum }));
 
-        listingEvents.current = ls;
+        // Listings: eventos de usuario; exigimos firma válida (el autor es el vendedor).
+        listingEvents.current = ls.filter(isSelfSigned);
         setListings(applySettledFilter(
-          parseListings(ls).filter(l => l.status === "open"),
+          parseListings(listingEvents.current).filter(l => l.status === "open"),
           settledPairs.current
         ));
 
@@ -170,6 +176,7 @@ export function useGameState(pubkey: string | null) {
           subscribe(
             [{ kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY], "#p": [pubkey] }],
             (ev) => {
+              if (!onlyFromIssuer([ev]).length) return; // descartar inyecciones (Fix #3)
               ownEvents.current = [...ownEvents.current, ev];
               setOwnership(subtractSales(
                 mergeOwn(parseOwnership(ownEvents.current), readLocalOwn(pubkey)),
@@ -182,6 +189,7 @@ export function useGameState(pubkey: string | null) {
 
       unsubs.push(
         subscribe([{ kinds: [KIND.LISTING] }], (ev) => {
+          if (!isSelfSigned(ev)) return; // listing con firma inválida (Fix #3)
           listingEvents.current = [...listingEvents.current, ev];
           // Always apply the settled filter so re-delivered or new listing events
           // don't resurrect sold listings.
@@ -194,6 +202,7 @@ export function useGameState(pubkey: string | null) {
 
       unsubs.push(
         subscribe([{ kinds: [KIND.SETTLEMENT], authors: [ISSUER_PUBKEY] }], (ev) => {
+          if (!onlyFromIssuer([ev]).length) return; // settlement no firmado por issuer (Fix #3)
           const s = parseSettlement(ev);
           if (!s) return;
 
@@ -235,9 +244,9 @@ export function useGameState(pubkey: string | null) {
 
   const refresh = useCallback(async () => {
     if (!pubkey || !ISSUER_PUBKEY) return;
-    const owns = await list([
+    const owns = onlyFromIssuer(await list([
       { kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY], "#p": [pubkey] },
-    ]);
+    ]));
     ownEvents.current = owns;
     const merged = mergeOwn(parseOwnership(owns), readLocalOwn(pubkey));
     writeLocalOwn(pubkey, merged);
