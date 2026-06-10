@@ -250,6 +250,20 @@ export function PenaltyMatchView({
   const isChallenger = myPubkey === match.challenger;
   const { t } = useLang();
   const { state, publishing, publishError, publishCommit, publishBlock, publishReveal } = usePenaltyMatch(match, identity);
+  const [cancelConfirm, setCancelConfirm] = useState(false);
+  const [canceling, setCanceling] = useState(false);
+
+  async function handleCancel() {
+    if (!cancelConfirm) { setCancelConfirm(true); return; }
+    setCanceling(true);
+    try {
+      await cancelMatch(identity, match);
+      onBack();
+    } catch {
+      setCanceling(false);
+      setCancelConfirm(false);
+    }
+  }
 
   // 3D scene state
   const [scenePhase, setScenePhase] = useState<"aim" | "flying" | "result">("aim");
@@ -454,6 +468,24 @@ export function PenaltyMatchView({
         <div style={{ fontSize: 16, fontWeight: 900, color: "var(--ink)", flex: 1 }}>
           {t.pm_pvp_title} · {match.rounds / 2} {t.pm_rounds_label} c/u
         </div>
+        {phase !== "finished" && (
+          <button
+            onClick={handleCancel}
+            disabled={canceling}
+            style={{
+              background: cancelConfirm ? "rgba(255,60,60,0.15)" : "transparent",
+              border: `1px solid ${cancelConfirm ? "rgba(255,60,60,0.5)" : "var(--line)"}`,
+              color: cancelConfirm ? "rgba(255,100,100,0.9)" : "var(--muted)",
+              padding: "5px 10px", borderRadius: 7, fontSize: 11,
+              cursor: canceling ? "default" : "pointer",
+              opacity: canceling ? 0.5 : 1,
+              flexShrink: 0,
+              fontFamily: "var(--condensed)", fontWeight: 700,
+            }}
+          >
+            {canceling ? "…" : cancelConfirm ? "¿Confirmar?" : "ABANDONAR"}
+          </button>
+        )}
       </div>
 
       {/* 3D Scene */}
