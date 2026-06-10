@@ -34,6 +34,7 @@ export function Album({
   claimedPages = [],
   myListings = [],
   identity,
+  focusSticker = null,
 }: {
   ownership: Ownership;
   onClaim: (page: Page) => void;
@@ -42,6 +43,8 @@ export function Album({
   claimedPages?: string[];
   myListings?: Listing[];
   identity?: Identity;
+  /** Pedido externo de saltar a la página que contiene esta figurita (token fuerza re-trigger). */
+  focusSticker?: { num: number; token: number } | null;
 }) {
   const listedNums = new Set(myListings.map(l => l.stickerNum));
   const [idx,         setIdx]         = useState(0);
@@ -84,6 +87,19 @@ export function Album({
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [go, idx]);
+
+  // Salto externo de página (revelado de figurita): va directo a la página
+  // destino con la animación de entrada, sin pasar por el bloqueo de `go`.
+  useEffect(() => {
+    if (!focusSticker) return;
+    const pi = PAGES.findIndex(p => p.numbers.includes(focusSticker.num));
+    if (pi < 0 || pi === idx) return;
+    setFlipDir(pi > idx ? "next" : "prev");
+    setIdx(pi);
+    setFlipPhase("in");
+    const t = setTimeout(() => setFlipPhase("idle"), 280);
+    return () => clearTimeout(t);
+  }, [focusSticker, idx]);
 
   const page          = PAGES[idx];
   const team          = TEAMS[page.id];
@@ -362,6 +378,7 @@ export function Album({
                     return (
                       <div
                         key={n}
+                        data-figu-slot={n}
                         className={has ? "pop-in" : ""}
                         onClick={() => has && setZoomedNum(n)}
                         style={{
@@ -773,6 +790,7 @@ function FwcGrid({ ownership, onZoom }: { ownership: Ownership; onZoom: (n: numb
         return (
           <div
             key={n}
+            data-figu-slot={n}
             className={has ? "pop-in" : ""}
             onClick={() => has && onZoom(n)}
             style={{
