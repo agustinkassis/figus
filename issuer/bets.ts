@@ -170,7 +170,7 @@ export async function handleBetLock(req: Event, receipt: Event): Promise<void> {
   }
 }
 
-async function getLud16(pubkey: string): Promise<string | null> {
+export async function getLud16(pubkey: string): Promise<string | null> {
   const profiles = await listOnce([{ kinds: [0], authors: [pubkey], limit: 1 }]);
   const profile = profiles.sort((a, b) => b.created_at - a.created_at)[0];
   if (!profile) return null;
@@ -182,7 +182,7 @@ async function getLud16(pubkey: string): Promise<string | null> {
   }
 }
 
-async function payLnAddress(lnAddress: string, sats: number): Promise<void> {
+export async function payLnAddress(lnAddress: string, sats: number): Promise<void> {
   const nwcStr = process.env.REWARD_NWC;
   if (!nwcStr) throw new Error("REWARD_NWC no configurado");
 

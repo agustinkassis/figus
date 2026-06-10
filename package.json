@@ -10,7 +10,10 @@
     "lint": "next lint",
     "issuer": "tsx watch issuer/index.ts",
     "seed": "tsx issuer/seed.ts",
-    "faces": "tsx scripts/fetch-faces.ts"
+    "faces": "tsx scripts/fetch-faces.ts",
+    "relay": "tsx issuer/test/relay.ts",
+    "test:forge": "tsx issuer/test/forge-attack.ts",
+    "test:order": "tsx issuer/test/order-flow.ts"
   },
   "dependencies": {
     "@react-three/drei": "^9.122.0",
