@@ -13,7 +13,8 @@
     "faces": "tsx scripts/fetch-faces.ts",
     "relay": "tsx issuer/test/relay.ts",
     "test:forge": "tsx issuer/test/forge-attack.ts",
-    "test:order": "tsx issuer/test/order-flow.ts"
+    "test:order": "tsx issuer/test/order-flow.ts",
+    "test:pay": "tsx issuer/test/order-pay.ts"
   },
   "dependencies": {
     "@react-three/drei": "^9.122.0",
