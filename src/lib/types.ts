@@ -55,7 +55,6 @@ export interface LeaderEntry {
   pubkey: string;
   profile: { name: string; picture: string } | null;
   stickers: number;
-  goals: number;
   score: number;
   rank: number;
 }

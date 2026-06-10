@@ -30,12 +30,9 @@ export function useLeaderboard(enabled: boolean): { entries: LeaderEntry[]; load
     setEntries([]);
 
     async function load() {
-      // 1+2 en paralelo: ownership y penalty_play no dependen entre sí.
+      // Ownership: única query necesaria para el ranking.
       // maxWait 4000ms: estos relays tardan hasta 2.3s — no los cortamos antes de que respondan.
-      const [ownEvents, penaltyEvents] = await Promise.all([
-        list([{ kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY], limit: 1000 }], 4000),
-        list([{ kinds: [KIND.PENALTY_PLAY], limit: 2000 }], 4000),
-      ]);
+      const ownEvents = await list([{ kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY], limit: 1000 }], 4000);
       if (cancelled) return;
 
       // Agrupar ownership por pubkey de jugador (#p tag)
@@ -55,15 +52,6 @@ export function useLeaderboard(enabled: boolean): { entries: LeaderEntry[]; load
       for (const pk of pubkeys) {
         const own = parseOwnership(byPubkey[pk]);
         stickerCounts[pk] = ALL_NUMBERS.filter(n => (own[n] ?? 0) > 0).length;
-      }
-
-      // Contar goles solo de jugadores conocidos
-      const pubkeySet = new Set(pubkeys);
-      const goalCounts: Record<string, number> = {};
-      for (const ev of penaltyEvents) {
-        if (!pubkeySet.has(ev.pubkey)) continue;
-        const result = ev.tags.find(t => t[0] === "result")?.[1];
-        if (result === "goal") goalCounts[ev.pubkey] = (goalCounts[ev.pubkey] || 0) + 1;
       }
 
       // 3. Perfiles (en paralelo con el procesamiento anterior ya terminó)
@@ -94,8 +82,7 @@ export function useLeaderboard(enabled: boolean): { entries: LeaderEntry[]; load
 
       const scored: LeaderEntry[] = pubkeys.map(pk => {
         const stickers = stickerCounts[pk] || 0;
-        const goals    = goalCounts[pk]    || 0;
-        return { pubkey: pk, profile: profileMap[pk] ?? null, stickers, goals, score: stickers + goals * 5, rank: 0 };
+        return { pubkey: pk, profile: profileMap[pk] ?? null, stickers, score: stickers, rank: 0 };
       });
 
       scored.sort((a, b) => b.score - a.score || b.stickers - a.stickers);

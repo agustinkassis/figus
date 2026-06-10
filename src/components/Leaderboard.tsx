@@ -45,7 +45,7 @@ function Avatar({ entry }: { entry: LeaderEntry }) {
           {name}
         </div>
         <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "var(--condensed)" }}>
-          {entry.stickers}/{TOTAL} figus · {entry.goals} ⚽
+          {entry.stickers}/{TOTAL} figus
         </div>
       </div>
     </div>
@@ -66,7 +66,7 @@ export function Leaderboard({ myPubkey, onChallenge }: { myPubkey: string | null
           🏆 RANKING GLOBAL
         </div>
         <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3 }}>
-          Puntos: 1 por figurita · 5 por gol de penal · actualizado en tiempo real desde Nostr
+          1 punto por figurita pegada en el álbum · actualizado en tiempo real desde Nostr
         </div>
       </div>
 
@@ -230,7 +230,7 @@ export function Leaderboard({ myPubkey, onChallenge }: { myPubkey: string | null
 
       {entries.length > 0 && (
         <div style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", marginTop: 14 }}>
-          {entries.length} coleccionistas · score = figuritas + goles×5
+          {entries.length} coleccionistas · score = figuritas pegadas
         </div>
       )}
     </div>
