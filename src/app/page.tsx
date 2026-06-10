@@ -257,13 +257,6 @@ function HomeInner() {
       .catch(() => {});
   }
 
-  // --- abrir sobre demo: genera figus localmente sin Lightning (para testear) ---
-  function openPackDemo() {
-    const nums = Array.from({ length: 7 }, () => rollSticker());
-    setPackMarks(null); // demo: no acredita, sin badges
-    setPackResult(nums);
-  }
-
   // ── DEV MODE: sobres 100% locales — sin zap, sin publicar eventos Nostr ──
   // Las figuritas NO se acreditan acá: quedan pendientes y, al cerrar el sobre,
   // pasan por el efecto de pegado (StickerPlacementFX) que las acredita al aterrizar.
@@ -979,7 +972,6 @@ function HomeInner() {
                 <Packs
                   onOpen={isDev ? openPackDev : openPack}
                   onOpenBulk={isDev ? openPackBulkDev : openPackBulk}
-                  onDemo={openPackDemo}
                   onCancel={() => setBusy(false)}
                   busy={busy}
                   freePack={{
@@ -1092,7 +1084,6 @@ function HomeInner() {
         </>
       ) : (
         <LandingPage
-          onPackDemo={openPackDemo}
           nip07Available={nip07Available}
           onNip07={connectNip07}
           onLocal={connectLocal}
@@ -1249,7 +1240,6 @@ function HomeInner() {
 // ─────────────────────────────────────────
 
 function LandingPage({
-  onPackDemo,
   nip07Available,
   onNip07,
   onLocal,
@@ -1257,7 +1247,6 @@ function LandingPage({
   onNip46QR,
   onNip46Bunker,
 }: {
-  onPackDemo: () => void;
   nip07Available: boolean;
   onNip07: () => void;
   onLocal: () => void;
@@ -1434,63 +1423,6 @@ function LandingPage({
         }}>
           {t.landing_prizes_note}
         </p>
-      </section>
-
-      {/* ── DEMO DE SOBRES ── */}
-      <section style={{ marginBottom: 60 }}>
-        <div style={{
-          background: "linear-gradient(135deg, rgba(232,185,35,.07), rgba(232,185,35,.02))",
-          border: "1px solid rgba(232,185,35,.3)",
-          borderRadius: 20,
-          padding: "44px 28px",
-          textAlign: "center",
-        }}>
-          <div style={{ fontSize: 52, marginBottom: 16, lineHeight: 1 }}>🎁</div>
-          <div style={{
-            fontFamily: "var(--display)",
-            fontSize: 22,
-            color: "var(--gold)",
-            marginBottom: 8,
-          }}>
-            {t.landing_demo_title}
-          </div>
-          <p style={{
-            fontSize: 13,
-            color: "var(--muted)",
-            margin: "0 auto 28px",
-            maxWidth: 380,
-            lineHeight: 1.7,
-          }}>
-            {t.landing_demo_desc}
-          </p>
-          <button
-            onClick={onPackDemo}
-            style={{
-              background: "linear-gradient(135deg, var(--gold), #c8890a)",
-              color: "#030b18",
-              border: "none",
-              padding: "14px 40px",
-              borderRadius: 12,
-              fontSize: 15,
-              fontWeight: 900,
-              fontFamily: "var(--condensed)",
-              letterSpacing: 1,
-              cursor: "pointer",
-              transition: "transform .15s, box-shadow .15s",
-              boxShadow: "0 4px 20px rgba(232,185,35,.25)",
-            }}
-            onMouseEnter={e => {
-              (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.04)";
-              (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 6px 28px rgba(232,185,35,.4)";
-            }}
-            onMouseLeave={e => {
-              (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)";
-              (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 20px rgba(232,185,35,.25)";
-            }}
-          >
-            {t.landing_demo_btn}
-          </button>
-        </div>
       </section>
 
       {/* ── DEMO PENAL ── */}
