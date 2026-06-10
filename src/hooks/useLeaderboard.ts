@@ -32,7 +32,7 @@ export function useLeaderboard(enabled: boolean): { entries: LeaderEntry[]; load
     async function load() {
       // Ownership: única query necesaria para el ranking.
       // maxWait 4000ms: estos relays tardan hasta 2.3s — no los cortamos antes de que respondan.
-      const ownEvents = await list([{ kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY], limit: 1000 }], 4000);
+      const ownEvents = await list([{ kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY] }], 8000);
       if (cancelled) return;
 
       // Agrupar ownership por pubkey de jugador (#p tag)
