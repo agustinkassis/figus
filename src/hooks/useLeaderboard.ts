@@ -30,10 +30,11 @@ export function useLeaderboard(enabled: boolean): { entries: LeaderEntry[]; load
     setEntries([]);
 
     async function load() {
-      // 1+2 en paralelo: ownership y penalty_play no dependen entre sí
+      // 1+2 en paralelo: ownership y penalty_play no dependen entre sí.
+      // maxWait 4000ms: estos relays tardan hasta 2.3s — no los cortamos antes de que respondan.
       const [ownEvents, penaltyEvents] = await Promise.all([
-        list([{ kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY], limit: 1000 }]),
-        list([{ kinds: [KIND.PENALTY_PLAY], limit: 2000 }]),
+        list([{ kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY], limit: 1000 }], 4000),
+        list([{ kinds: [KIND.PENALTY_PLAY], limit: 2000 }], 4000),
       ]);
       if (cancelled) return;
 
