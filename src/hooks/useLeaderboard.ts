@@ -7,26 +7,37 @@ import { parseOwnership } from "@/lib/parsers";
 import { ALL_NUMBERS } from "@/lib/catalog";
 import type { LeaderEntry } from "@/lib/types";
 
+// Cache en módulo: sobrevive navegación entre tabs, expira a los 5 minutos.
+let cachedEntries: LeaderEntry[] | null = null;
+let cacheTs = 0;
+const CACHE_TTL = 5 * 60 * 1000;
+
 export function useLeaderboard(enabled: boolean): { entries: LeaderEntry[]; loading: boolean } {
-  const [entries, setEntries] = useState<LeaderEntry[]>([]);
+  const [entries, setEntries] = useState<LeaderEntry[]>(() => cachedEntries ?? []);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!enabled || !ISSUER_PUBKEY) return;
+
+    // Servir caché si es fresco
+    if (cachedEntries && Date.now() - cacheTs < CACHE_TTL) {
+      setEntries(cachedEntries);
+      return;
+    }
+
     let cancelled = false;
     setLoading(true);
     setEntries([]);
 
     async function load() {
-      // 1. Fetch all OWNERSHIP events (issuer-signed, tagged with player pubkeys)
-      const ownEvents = await list([{
-        kinds: [KIND.OWNERSHIP],
-        authors: [ISSUER_PUBKEY],
-        limit: 1000,
-      }]);
+      // 1+2 en paralelo: ownership y penalty_play no dependen entre sí
+      const [ownEvents, penaltyEvents] = await Promise.all([
+        list([{ kinds: [KIND.OWNERSHIP], authors: [ISSUER_PUBKEY], limit: 1000 }]),
+        list([{ kinds: [KIND.PENALTY_PLAY], limit: 2000 }]),
+      ]);
       if (cancelled) return;
 
-      // Group ownership events by player pubkey (#p tag)
+      // Agrupar ownership por pubkey de jugador (#p tag)
       const byPubkey: Record<string, typeof ownEvents> = {};
       for (const ev of ownEvents) {
         const p = ev.tags.find(t => t[0] === "p")?.[1];
@@ -39,56 +50,47 @@ export function useLeaderboard(enabled: boolean): { entries: LeaderEntry[]; load
       const pubkeys = Object.keys(byPubkey);
       if (!pubkeys.length) { setLoading(false); return; }
 
-      // 2. Compute sticker count per player
       const stickerCounts: Record<string, number> = {};
       for (const pk of pubkeys) {
         const own = parseOwnership(byPubkey[pk]);
         stickerCounts[pk] = ALL_NUMBERS.filter(n => (own[n] ?? 0) > 0).length;
       }
 
-      // 3. Fetch PENALTY_PLAY events for all players
-      const penaltyEvents = await list([{
-        kinds: [KIND.PENALTY_PLAY],
-        authors: pubkeys,
-        limit: 5000,
-      }]);
-      if (cancelled) return;
-
-      // Count goals: each event has ["result", "goal"|"save"]
-      // Events are addressable per day so one per player per day
+      // Contar goles solo de jugadores conocidos
+      const pubkeySet = new Set(pubkeys);
       const goalCounts: Record<string, number> = {};
       for (const ev of penaltyEvents) {
+        if (!pubkeySet.has(ev.pubkey)) continue;
         const result = ev.tags.find(t => t[0] === "result")?.[1];
-        if (result === "goal") {
-          goalCounts[ev.pubkey] = (goalCounts[ev.pubkey] || 0) + 1;
-        }
+        if (result === "goal") goalCounts[ev.pubkey] = (goalCounts[ev.pubkey] || 0) + 1;
       }
 
-      // 4. Fetch profiles
+      // 3. Perfiles (en paralelo con el procesamiento anterior ya terminó)
       const profileMap: Record<string, { name: string; picture: string } | null> = {};
       try {
         const profileEvs = await list([{ kinds: [0], authors: pubkeys }]);
-        const latest: Record<string, (typeof profileEvs)[0]> = {};
-        for (const ev of profileEvs) {
-          if (!latest[ev.pubkey] || ev.created_at > latest[ev.pubkey].created_at)
-            latest[ev.pubkey] = ev;
-        }
-        for (const pk of pubkeys) {
-          const ev = latest[pk];
-          if (ev) {
-            try {
-              const meta = JSON.parse(ev.content);
-              profileMap[pk] = { name: meta.display_name || meta.name || "", picture: meta.picture || "" };
-            } catch { profileMap[pk] = null; }
-          } else {
-            profileMap[pk] = null;
+        if (!cancelled) {
+          const latest: Record<string, (typeof profileEvs)[0]> = {};
+          for (const ev of profileEvs) {
+            if (!latest[ev.pubkey] || ev.created_at > latest[ev.pubkey].created_at)
+              latest[ev.pubkey] = ev;
+          }
+          for (const pk of pubkeys) {
+            const ev = latest[pk];
+            if (ev) {
+              try {
+                const meta = JSON.parse(ev.content);
+                profileMap[pk] = { name: meta.display_name || meta.name || "", picture: meta.picture || "" };
+              } catch { profileMap[pk] = null; }
+            } else {
+              profileMap[pk] = null;
+            }
           }
         }
       } catch {}
 
       if (cancelled) return;
 
-      // 5. Score = stickers + goals × 5
       const scored: LeaderEntry[] = pubkeys.map(pk => {
         const stickers = stickerCounts[pk] || 0;
         const goals    = goalCounts[pk]    || 0;
@@ -98,6 +100,8 @@ export function useLeaderboard(enabled: boolean): { entries: LeaderEntry[]; load
       scored.sort((a, b) => b.score - a.score || b.stickers - a.stickers);
       scored.forEach((e, i) => { e.rank = i + 1; });
 
+      cachedEntries = scored;
+      cacheTs = Date.now();
       setEntries(scored);
       setLoading(false);
     }

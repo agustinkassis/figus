@@ -527,7 +527,7 @@ export default function PenaltyScene3D(props: PenaltyScene3DProps) {
         camera={{ position: [CAM_POS[0], CAM_POS[1], CAM_POS[2]], fov: 55 }}
         gl={{ antialias: true }}
         onCreated={({ gl }) => {
-          gl.shadowMap.type = THREE.PCFSoftShadowMap;
+          gl.shadowMap.type = THREE.PCFShadowMap;
         }}
         style={{ width: "100%", height: "100%" }}
       >
