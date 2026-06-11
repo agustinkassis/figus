@@ -24,6 +24,8 @@ function nwcPayments(nwc: string): Payments {
 // NUNCA usar en producción — concede figuritas sin cobro real.
 function mockPayments(): Payments {
   const amounts = new Map<string, number>();
+  // Lookups en vuelo — para observar la concurrencia del poller en los tests.
+  let inflight = 0;
   return {
     mode: "mock",
     async makeInvoice(amountSats) {
@@ -34,8 +36,16 @@ function mockPayments(): Payments {
     async lookupInvoice(paymentHash) {
       // MOCK_LOOKUP_DELAY_MS simula un lookup NWC lento (test de re-entrada del
       // poller: con delay > ORDER_POLL_MS la conciliación tarda más que un tick).
+      // MOCK_UNPAID=1 simula facturas que nadie pagó (lookup → no settled), el
+      // estado en que las órdenes se acumulan y el poller spamea a la wallet.
       const delay = Number(process.env.MOCK_LOOKUP_DELAY_MS || "0");
-      if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+      inflight++;
+      if (delay > 0) {
+        console.log(`   [mock] lookup ${paymentHash.slice(0, 8)}… (en vuelo: ${inflight})`);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+      inflight--;
+      if (process.env.MOCK_UNPAID === "1") return { settled: false, amountSats: 0 };
       return { settled: true, amountSats: amounts.get(paymentHash) ?? 0 };
     },
   };
