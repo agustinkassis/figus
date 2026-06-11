@@ -194,13 +194,22 @@ export interface SyncProgress {
   relays: RelayReport[];
   totalEvents: number;   // tamaño del set canónico
   backedUp: number;      // eventos en respaldo local tras la corrida
+  newLocal: number;      // pruebas nuevas traídas al respaldo en esta corrida
 }
+
+/**
+ * entrada → trae TODO de los relays al respaldo local (no publica nada).
+ * salida  → republica el respaldo local a los relays donde falte.
+ * full    → entrada + salida en una pasada.
+ */
+export type SyncMode = "entrada" | "salida" | "full";
 
 export interface SyncOptions {
   user: string;
   relays: string[];
   onProgress: (p: SyncProgress) => void;
   signal?: { cancelled: boolean };
+  mode?: SyncMode;
 }
 
 /** Solo nos importan las pruebas de figus: ownership vigente + grants. */
@@ -211,18 +220,28 @@ function figuFilters(user: string): Filter[] {
   ];
 }
 
-export async function syncFigus({ user, relays, onProgress, signal }: SyncOptions): Promise<SyncProgress> {
+export async function syncFigus({ user, relays, onProgress, signal, mode = "full" }: SyncOptions): Promise<SyncProgress> {
   const reports: RelayReport[] = relays.map((url) => ({
     url, status: "pendiente", found: 0, missing: 0, published: 0, failed: 0,
   }));
   const state: SyncProgress = {
     phase: "collect", message: "Conectando a los relays…", overall: 0.02,
-    relays: reports, totalEvents: 0, backedUp: 0,
+    relays: reports, totalEvents: 0, backedUp: 0, newLocal: 0,
   };
   const emit = () => onProgress({ ...state, relays: reports.map((r) => ({ ...r })) });
   emit();
 
+  // Respaldo local previo — base de la salida y referencia para contar qué
+  // trae de nuevo la entrada.
+  let localEvents: Event[] = [];
+  try {
+    localEvents = (await loadBackup(user)).filter((ev) => ev.pubkey === ISSUER_PUBKEY);
+  } catch {}
+  const localIds = new Set(localEvents.map((ev) => ev.id));
+
   // ── Fase 1: recolectar las figus relay por relay ────────────────────────────
+  // Siempre se consulta: la entrada lo necesita para traer, la salida para
+  // saber qué le falta a cada relay antes de publicar.
   const perRelayIds = new Map<string, Set<string>>();
   const union = new Map<string, Event>();
 
@@ -251,24 +270,29 @@ export async function syncFigus({ user, relays, onProgress, signal }: SyncOption
   }));
   if (signal?.cancelled) return state;
 
-  // Sumar el respaldo local: si todos los relays perdieron algo, acá sigue vivo.
-  try {
-    for (const ev of await loadBackup(user)) {
-      if (ev.pubkey === ISSUER_PUBKEY && !union.has(ev.id)) union.set(ev.id, ev);
-    }
-  } catch {}
+  // Pruebas nuevas que los relays tienen y el respaldo local no (entrada).
+  state.newLocal = [...union.keys()].filter((id) => !localIds.has(id)).length;
+
+  // Sumar el respaldo local a la union: si todos los relays perdieron algo,
+  // acá sigue vivo.
+  for (const ev of localEvents) {
+    if (!union.has(ev.id)) union.set(ev.id, ev);
+  }
 
   // ── Fase 2: set canónico + diagnóstico ──────────────────────────────────────
   // 30100 es reemplazable: solo vale el último por d-tag (republicar versiones
   // viejas es inútil). Los grants 1573 son regulares: van todos.
+  // Salida: el set sale SOLO del respaldo local (lo local es la fuente);
+  // entrada/full: union de relays + respaldo.
   state.phase = "diagnose";
   state.message = "Armando el set canónico de tus figus…";
   state.overall = 0.37;
   emit();
 
+  const sourceEvents = mode === "salida" ? localEvents : [...union.values()];
   const latestByD = new Map<string, Event>();
   const grants: Event[] = [];
-  for (const ev of union.values()) {
+  for (const ev of sourceEvents) {
     if (ev.kind === KIND.OWNERSHIP) {
       const d = ev.tags.find((t) => t[0] === "d")?.[1] ?? ev.id;
       const cur = latestByD.get(d);
@@ -281,11 +305,27 @@ export async function syncFigus({ user, relays, onProgress, signal }: SyncOption
   const canonicalIds = canonical.map((e) => e.id);
   state.totalEvents = canonical.length;
 
-  // Respaldo local del set completo (las pruebas quedan en el dispositivo).
-  try {
-    await backupEvents(user, canonical);
-    state.backedUp = canonical.length;
-  } catch {}
+  // Entrada (y full): persistir TODO lo recolectado en el respaldo local.
+  if (mode !== "salida") {
+    try {
+      await backupEvents(user, [...union.values()]);
+      state.backedUp = union.size;
+    } catch {}
+  } else {
+    state.backedUp = localEvents.length;
+  }
+
+  // Entrada pura: acá termina — no se publica nada.
+  if (mode === "entrada") {
+    for (const r of reports) if (r.status === "ok") r.status = "sincronizado";
+    state.phase = "done";
+    state.overall = 1;
+    state.message = state.newLocal > 0
+      ? `✅ ${state.newLocal} pruebas nuevas traídas de los relays · respaldo local: ${state.backedUp}`
+      : `✅ Tu respaldo local ya tenía todo (${state.backedUp} pruebas)`;
+    emit();
+    return state;
+  }
 
   let totalMissing = 0;
   for (let i = 0; i < relays.length; i++) {
@@ -335,8 +375,9 @@ export async function syncFigus({ user, relays, onProgress, signal }: SyncOption
   const okRelays = reports.filter((r) => r.status === "sincronizado").length;
   state.phase = "done";
   state.overall = 1;
+  const desde = mode === "salida" ? " desde tu respaldo local" : "";
   state.message = totalMissing > 0
-    ? `✅ ${totalPublished} copias republicadas · tus figus están en ${okRelays}/${relays.length} relays`
+    ? `✅ ${totalPublished} copias republicadas${desde} · tus figus están en ${okRelays}/${relays.length} relays`
     : `✅ Tus ${canonical.length} pruebas ya estaban replicadas en ${okRelays}/${relays.length} relays`;
   emit();
   return state;
