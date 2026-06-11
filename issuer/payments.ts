@@ -32,6 +32,10 @@ function mockPayments(): Payments {
       return { invoice: `lnbcmock1${paymentHash.slice(0, 24)}`, paymentHash };
     },
     async lookupInvoice(paymentHash) {
+      // MOCK_LOOKUP_DELAY_MS simula un lookup NWC lento (test de re-entrada del
+      // poller: con delay > ORDER_POLL_MS la conciliación tarda más que un tick).
+      const delay = Number(process.env.MOCK_LOOKUP_DELAY_MS || "0");
+      if (delay > 0) await new Promise((r) => setTimeout(r, delay));
       return { settled: true, amountSats: amounts.get(paymentHash) ?? 0 };
     },
   };

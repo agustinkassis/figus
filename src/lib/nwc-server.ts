@@ -90,15 +90,17 @@ export async function nwcLookupInvoice(
   const res = await nwcRequest("lookup_invoice", { payment_hash: paymentHash }, nwcString);
   // Log crudo para diagnosticar wallets con campos no estándar
   console.log(`   lookup_invoice raw response: ${JSON.stringify(res)}`);
-  // NIP-47: settled_at (epoch), state === "settled", settled === true,
-  // o preimage presente y no vacío (indica pago confirmado en varias wallets)
+  // NIP-47: `settled_at` (epoch) cuando se pagó, o `state === "settled"` (algunas
+  // wallets lo devuelven en mayúsculas), `settled`/`paid` === true, o preimage
+  // real presente — pero NO el placeholder de ceros que exponen varias wallets
+  // mientras la factura sigue impaga.
+  const preimage = String(res.preimage ?? "");
   const settled =
     Boolean(res.settled_at) ||
-    res.state === "settled" ||
-    res.state === "SETTLED" ||
+    String(res.state ?? "").toLowerCase() === "settled" ||
     res.settled === true ||
-    (typeof res.preimage === "string" && res.preimage.length > 0) ||
-    res.paid === true;
+    res.paid === true ||
+    (preimage.length > 0 && !/^0+$/.test(preimage));
   const amountMsats = Number(res.amount_received ?? res.amount ?? 0);
   return { settled, amountSats: Math.floor(amountMsats / 1000) };
 }
