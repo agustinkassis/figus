@@ -498,12 +498,12 @@ async function main() {
 
   // Poller de cobro: lookups secuenciales con pausa para no agotar el rate limit NWC.
   const POLL_MS = Number(process.env.ORDER_POLL_MS || "30000"); // 30s entre ciclos
-  const ORDER_EXPIRY_MS = 30 * 60 * 1000; // expira órdenes de +30 min (nunca se van a pagar)
+  const ORDER_EXPIRY_SECS = 30 * 60; // 30 min en segundos (ts de las órdenes está en segundos)
   setInterval(async () => {
     const pending = pendingOrders();
-    const now = Date.now();
+    const nowSecs = now(); // segundos — mismo formato que Order.ts
     for (const o of pending) {
-      if (now - o.ts > ORDER_EXPIRY_MS) {
+      if (nowSecs - o.ts > ORDER_EXPIRY_SECS) {
         console.log(`⏰ orden ${o.paymentHash.slice(0, 10)}… expirada (+30 min) → failed`);
         updateOrder(o.paymentHash, { status: "failed" });
         continue;
