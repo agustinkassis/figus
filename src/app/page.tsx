@@ -177,9 +177,9 @@ function HomeInner() {
     } catch { setClaimedPages([]); }
   }, [pubkey]);
 
-  const notify = (m: string) => {
+  const notify = (m: string, durationMs = 3000) => {
     setToast(m);
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), durationMs);
   };
 
   const configured = Boolean(ISSUER_PUBKEY);
@@ -687,7 +687,9 @@ function HomeInner() {
       });
       const data = await res.json() as { ok?: boolean; error?: string; message?: string };
       if (!res.ok) {
-        notify("⚠️ " + (data.error || "Error al reclamar el premio"));
+        const msg = "⚠️ " + (data.error || `Error ${res.status} al reclamar el premio`);
+        console.error("[claim]", res.status, data);
+        notify(msg, 8000);
         return;
       }
       // Persist claimed state so the button flips to "RECLAMADO"
@@ -696,7 +698,9 @@ function HomeInner() {
       try { localStorage.setItem(`figus_rewards_${pubkey}`, JSON.stringify(next)); } catch {}
       notify("🏆 " + (data.message || `Premio de ${displayName} enviado.`));
     } catch (e: any) {
-      notify("⚠️ " + (e.message || "Error al reclamar"));
+      const msg = "⚠️ " + (e.message || "Error al reclamar");
+      console.error("[claim]", e);
+      notify(msg, 8000);
     } finally {
       setBusy(false);
     }
@@ -1237,9 +1241,9 @@ function HomeInner() {
             bottom: 28,
             left: "50%",
             transform: "translateX(-50%)",
-            background: "var(--panel)",
-            border: "1px solid var(--gold)",
-            color: "var(--ink)",
+            background: toast.startsWith("⚠️") ? "#3d0a0a" : "var(--panel)",
+            border: toast.startsWith("⚠️") ? "1px solid #e05555" : "1px solid var(--gold)",
+            color: toast.startsWith("⚠️") ? "#ffaaaa" : "var(--ink)",
             padding: "12px 20px",
             borderRadius: 12,
             fontSize: 14,
