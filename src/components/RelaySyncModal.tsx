@@ -15,7 +15,7 @@ import { RELAYS } from "@/lib/constants";
 import { backupCount } from "@/lib/figuDb";
 import {
   POPULAR_RELAYS, getExtraRelays, addExtraRelay, removeExtraRelay,
-  syncFigus, type SyncProgress, type RelayReport,
+  syncFigus, type SyncProgress, type RelayReport, type SyncMode,
 } from "@/lib/relaySync";
 
 const shortUrl = (u: string) => u.replace(/^wss?:\/\//, "").replace(/\/$/, "");
@@ -129,6 +129,7 @@ export function RelaySyncModal({ pubkey, onClose }: { pubkey: string; onClose: (
   const [input, setInput] = useState("");
   const [inputError, setInputError] = useState(false);
   const [running, setRunning] = useState(false);
+  const [runMode, setRunMode] = useState<SyncMode>("full");
   const [progress, setProgress] = useState<SyncProgress | null>(null);
   const [localCount, setLocalCount] = useState<number | null>(null);
   const cancelRef = useRef({ cancelled: false });
@@ -155,9 +156,11 @@ export function RelaySyncModal({ pubkey, onClose }: { pubkey: string; onClose: (
     setExtraRelays(getExtraRelays());
   }
 
-  async function run() {
+  async function run(mode: SyncMode) {
     if (running) return;
     setRunning(true);
+    setRunMode(mode);
+    setProgress(null);
     cancelRef.current = { cancelled: false };
     try {
       await syncFigus({
@@ -165,6 +168,7 @@ export function RelaySyncModal({ pubkey, onClose }: { pubkey: string; onClose: (
         relays: allRelays,
         onProgress: setProgress,
         signal: cancelRef.current,
+        mode,
       });
     } finally {
       setRunning(false);
@@ -369,8 +373,12 @@ export function RelaySyncModal({ pubkey, onClose }: { pubkey: string; onClose: (
             <div style={{ display: "flex", justifyContent: "center", gap: 18, textAlign: "center" }}>
               {[
                 { v: progress.totalEvents, l: "PRUEBAS" },
-                { v: `${okRelays}/${allRelays.length}`, l: "RELAYS AL DÍA" },
-                { v: totalPublished, l: "REPUBLICADAS" },
+                ...(runMode === "entrada"
+                  ? [{ v: progress.newLocal, l: "NUEVAS EN LOCAL" }]
+                  : [
+                      { v: `${okRelays}/${allRelays.length}`, l: "RELAYS AL DÍA" },
+                      { v: totalPublished, l: "REPUBLICADAS" },
+                    ]),
                 { v: progress.backedUp, l: "EN RESPALDO" },
               ].map((s) => (
                 <div key={s.l}>
@@ -382,9 +390,61 @@ export function RelaySyncModal({ pubkey, onClose }: { pubkey: string; onClose: (
           </div>
         )}
 
-        {/* CTA */}
+        {/* CTAs: entrada / salida / ciclo completo */}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={() => run("entrada")}
+            disabled={running}
+            title="Trae TODAS tus figus de todos los relays y las guarda en este dispositivo"
+            style={{
+              flex: 1,
+              background: "transparent",
+              border: "1px solid rgba(96,165,250,.5)",
+              color: running && runMode === "entrada" ? "var(--muted)" : "#60a5fa",
+              padding: "10px 0", borderRadius: 10,
+              fontWeight: 900, fontSize: 11, fontFamily: "var(--condensed)",
+              letterSpacing: 0.5, cursor: running ? "default" : "pointer",
+              opacity: running && runMode !== "entrada" ? 0.4 : 1,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+            }}
+          >
+            {running && runMode === "entrada" ? (
+              <span style={{
+                width: 11, height: 11,
+                border: "2px solid rgba(96,165,250,.3)", borderTopColor: "#60a5fa",
+                borderRadius: "50%", animation: "rsSpin .7s linear infinite", display: "inline-block",
+              }} />
+            ) : "⬇"}
+            ENTRADA · TRAER A LOCAL
+          </button>
+          <button
+            onClick={() => run("salida")}
+            disabled={running || localCount === 0}
+            title="Republica tu respaldo local en todos los relays donde falte"
+            style={{
+              flex: 1,
+              background: "transparent",
+              border: "1px solid rgba(74,222,128,.5)",
+              color: running && runMode === "salida" ? "var(--muted)" : "#4ade80",
+              padding: "10px 0", borderRadius: 10,
+              fontWeight: 900, fontSize: 11, fontFamily: "var(--condensed)",
+              letterSpacing: 0.5, cursor: running || localCount === 0 ? "default" : "pointer",
+              opacity: (running && runMode !== "salida") || localCount === 0 ? 0.4 : 1,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+            }}
+          >
+            {running && runMode === "salida" ? (
+              <span style={{
+                width: 11, height: 11,
+                border: "2px solid rgba(74,222,128,.3)", borderTopColor: "#4ade80",
+                borderRadius: "50%", animation: "rsSpin .7s linear infinite", display: "inline-block",
+              }} />
+            ) : "⬆"}
+            SALIDA · REPUBLICAR
+          </button>
+        </div>
         <button
-          onClick={run}
+          onClick={() => run("full")}
           disabled={running}
           style={{
             background: running
@@ -395,16 +455,17 @@ export function RelaySyncModal({ pubkey, onClose }: { pubkey: string; onClose: (
             fontWeight: 900, fontSize: 14, fontFamily: "var(--condensed)",
             letterSpacing: 1, cursor: running ? "default" : "pointer",
             display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+            marginTop: -8,
           }}
         >
-          {running && (
+          {running && runMode === "full" && (
             <span style={{
               width: 14, height: 14,
               border: "2px solid rgba(232,185,35,.3)", borderTopColor: "var(--gold)",
               borderRadius: "50%", animation: "rsSpin .7s linear infinite", display: "inline-block",
             }} />
           )}
-          {running ? "SINCRONIZANDO…" : done ? "🔄 VOLVER A SINCRONIZAR" : "🔄 SINCRONIZAR FIGUS EN TODOS LOS RELAYS"}
+          {running ? "SINCRONIZANDO…" : done ? "🔄 VOLVER A SINCRONIZAR TODO" : "🔄 SINCRONIZACIÓN COMPLETA (ENTRADA + SALIDA)"}
         </button>
       </div>
     </div>
