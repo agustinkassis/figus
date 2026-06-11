@@ -14,6 +14,7 @@
     "relay": "tsx issuer/test/relay.ts",
     "test:forge": "tsx issuer/test/forge-attack.ts",
     "test:order": "tsx issuer/test/order-flow.ts",
+    "test:race": "tsx issuer/test/double-grant.ts",
     "test:pay": "tsx issuer/test/order-pay.ts"
   },
   "dependencies": {

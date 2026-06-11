@@ -15,7 +15,7 @@ export interface Order {
   buyer: string;
   action: OrderAction;
   amountSats: number;
-  status: "pending" | "granted" | "failed";
+  status: "pending" | "granted" | "failed" | "expired";
   ts: number;
   // open-pack(-10)
   stickers?: number[];

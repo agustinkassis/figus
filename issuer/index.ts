@@ -231,11 +231,27 @@ async function handleOrderRequest(ev: Event) {
   console.log(`🧾 factura ${action} (${amountSats} sats) para ${buyer.slice(0, 8)}… hash=${paymentHash.slice(0, 12)}…`);
 }
 
-// Concreta una orden ya pagada (idempotente vía ledger).
+// Conciliaciones en vuelo. Una conciliación de pack-10 tarda más que ORDER_POLL_MS
+// (lookup NWC + 70 bumps con query a relays), así que sin este guard el poller
+// re-entraba a fulfillOrder con la orden todavía "pending" y concedía 2-3 veces
+// el mismo pago (visto en producción: 1 sobre pagado → 2 grants, 1 caja → 3 grants).
+const fulfilling = new Set<string>();
+
+// Concreta una orden ya pagada (idempotente vía ledger + guard de re-entrada).
 async function fulfillOrder(paymentHash: string) {
+  if (fulfilling.has(paymentHash)) return;
   const order = getOrder(paymentHash);
   if (!order || order.status !== "pending") return;
+  fulfilling.add(paymentHash);
+  try {
+    await fulfillOrderInner(order);
+  } finally {
+    fulfilling.delete(paymentHash);
+  }
+}
 
+async function fulfillOrderInner(order: Order) {
+  const { paymentHash } = order;
   let info: { settled: boolean; amountSats: number };
   try {
     info = await payments.lookupInvoice(paymentHash);
@@ -498,7 +514,9 @@ async function main() {
   startFootballPoller(settleBetsForMatch);
 
   // Listener event-driven: la wallet notifica pagos vía kind 23196 (NIP-47).
-  // No hace lookup_invoice → no consume rate limit del relay NWC.
+  // No hace lookup_invoice → no consume rate limit del relay NWC. El guard de
+  // re-entrada de fulfillOrder hace inocuo que la notificación y el poller de
+  // fallback lleguen a la vez (o que la wallet notifique duplicado).
   const nwcConn = process.env.ISSUER_NWC || process.env.REWARD_NWC;
   if (nwcConn && payments.mode === "nwc") {
     listenNwcPayments(nwcConn, (paymentHash, amountSats) => {
@@ -507,21 +525,33 @@ async function main() {
     });
   }
 
-  // Poller de cobro como fallback: corre cada 5 min en caso de que la notificación
-  // no llegue (wallet que no soporta kind 23196). Secuencial para no agotar rate limit.
+  // Poller de cobro como fallback: corre cada 5 min por si la notificación no
+  // llega (wallet sin soporte de kind 23196). El barrido es SECUENCIAL, con pausa
+  // entre lookups, y nunca se solapa con el anterior: cada lookup NWC mantiene un
+  // socket vivo hasta 20s y las órdenes impagas se acumulan — un barrido paralelo
+  // termina saturando al proveedor de la wallet (lookups que fallan → ninguna
+  // orden pagada se confirma más).
   const POLL_MS = Number(process.env.ORDER_POLL_MS || "300000"); // 5 min fallback
-  const ORDER_EXPIRY_SECS = 30 * 60; // 30 min en segundos (ts de las órdenes está en segundos)
+  const ORDER_TTL_S = Number(process.env.ORDER_TTL_MIN || "30") * 60;
+  const LOOKUP_PACE_MS = 5000;
+  let sweeping = false;
   setInterval(async () => {
-    const pending = pendingOrders();
-    const nowSecs = now();
-    for (const o of pending) {
-      if (nowSecs - o.ts > ORDER_EXPIRY_SECS) {
-        console.log(`⏰ orden ${o.paymentHash.slice(0, 10)}… expirada (+30 min) → failed`);
-        updateOrder(o.paymentHash, { status: "failed" });
-        continue;
+    if (sweeping) return; // el barrido anterior sigue corriendo
+    sweeping = true;
+    try {
+      for (const o of pendingOrders()) {
+        // Una factura impaga no se concilia para siempre: vencida la TTL se expira
+        // y deja de generar lookups NWC en cada tick. El comprador pide otra.
+        if (now() - o.ts > ORDER_TTL_S) {
+          updateOrder(o.paymentHash, { status: "expired" });
+          console.log(`🕓 orden ${o.paymentHash.slice(0, 10)}… expirada sin pago (${o.action})`);
+          continue;
+        }
+        await fulfillOrder(o.paymentHash).catch((e) => console.error("fulfill error:", e));
+        await new Promise<void>((r) => setTimeout(r, LOOKUP_PACE_MS));
       }
-      await fulfillOrder(o.paymentHash).catch((e) => console.error("fulfill error:", e));
-      await new Promise<void>((r) => setTimeout(r, 5000));
+    } finally {
+      sweeping = false;
     }
   }, POLL_MS);
 
