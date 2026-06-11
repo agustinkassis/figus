@@ -88,9 +88,18 @@ export async function nwcLookupInvoice(
   nwcString: string
 ): Promise<{ settled: boolean; amountSats: number }> {
   const res = await nwcRequest("lookup_invoice", { payment_hash: paymentHash }, nwcString);
-  // NIP-47: `settled_at` (epoch) cuando se pagó, o `state === "settled"`.
-  const settled = Boolean(res.settled_at) || res.state === "settled" || res.settled === true;
-  const amountMsats = Number(res.amount ?? 0);
+  // Log crudo para diagnosticar wallets con campos no estándar
+  console.log(`   lookup_invoice raw response: ${JSON.stringify(res)}`);
+  // NIP-47: settled_at (epoch), state === "settled", settled === true,
+  // o preimage presente y no vacío (indica pago confirmado en varias wallets)
+  const settled =
+    Boolean(res.settled_at) ||
+    res.state === "settled" ||
+    res.state === "SETTLED" ||
+    res.settled === true ||
+    (typeof res.preimage === "string" && res.preimage.length > 0) ||
+    res.paid === true;
+  const amountMsats = Number(res.amount_received ?? res.amount ?? 0);
   return { settled, amountSats: Math.floor(amountMsats / 1000) };
 }
 
