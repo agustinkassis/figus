@@ -168,6 +168,61 @@ function requestResponseWs(
   });
 }
 
+// Suscripción a notificaciones NWC (kind 23196 — NIP-47).
+// La wallet publica un evento "payment_received" cuando cobra una factura,
+// lo que nos permite confirmar el pago SIN hacer lookup_invoice (evita rate limit).
+export function listenNwcPayments(
+  nwcString: string,
+  onSettled: (paymentHash: string, amountSats: number) => void
+): () => void {
+  const conn = parseNwcServer(nwcString);
+  const clientPubkey = getPublicKey(conn.secret);
+  let closed = false;
+  let ws: WebSocket | null = null;
+
+  function connect() {
+    if (closed) return;
+    const relayUrl = conn.relays[0];
+    ws = new WebSocket(relayUrl);
+
+    ws.on("open", () => {
+      ws!.send(JSON.stringify(["REQ", "nwc-notif", {
+        kinds: [23196],
+        authors: [conn.walletPubkey],
+        "#p": [clientPubkey],
+        since: Math.floor(Date.now() / 1000) - 300, // últimos 5 min al reconectar
+      }]));
+      console.log("🔔 NWC notification listener conectado");
+    });
+
+    ws.on("message", (data: Buffer) => {
+      try {
+        const msg = JSON.parse(data.toString()) as unknown[];
+        if (msg[0] !== "EVENT" || msg[1] !== "nwc-notif") return;
+        const ev = msg[2] as { content: string };
+        const plain = nip04.decrypt(conn.secret, conn.walletPubkey, ev.content);
+        const parsed = JSON.parse(plain) as {
+          notification_type?: string;
+          notification?: { payment_hash?: string; amount?: number };
+        };
+        if (
+          parsed.notification_type === "payment_received" &&
+          parsed.notification?.payment_hash
+        ) {
+          const amountSats = Math.floor((parsed.notification.amount ?? 0) / 1000);
+          onSettled(parsed.notification.payment_hash, amountSats);
+        }
+      } catch { /* ignorar mensajes ajenos o errores de decrypt */ }
+    });
+
+    ws.on("error", () => { if (!closed) setTimeout(connect, 5000); });
+    ws.on("close", () => { if (!closed) setTimeout(connect, 5000); });
+  }
+
+  connect();
+  return () => { closed = true; try { ws?.close(); } catch {} };
+}
+
 // ── Fetch a Nostr event from a relay (Node.js WebSocket) ──────────────────────
 
 export async function fetchNostrEvents(

@@ -8,6 +8,7 @@ import {
 import { handleBetLock, handleBetCancel, loadBetState, settleBetsForMatch, payLnAddress, getLud16 } from "./bets";
 import { startFootballPoller } from "./football";
 import { getPayments } from "./payments";
+import { listenNwcPayments } from "../src/lib/nwc-server";
 import { getOrder, putOrder, updateOrder, pendingOrders, wasProcessed, markProcessed, type Order, type OrderAction } from "./store";
 
 const KIND = {
@@ -496,12 +497,23 @@ async function main() {
   await loadBetState();
   startFootballPoller(settleBetsForMatch);
 
-  // Poller de cobro: lookups secuenciales con pausa para no agotar el rate limit NWC.
-  const POLL_MS = Number(process.env.ORDER_POLL_MS || "30000"); // 30s entre ciclos
+  // Listener event-driven: la wallet notifica pagos vía kind 23196 (NIP-47).
+  // No hace lookup_invoice → no consume rate limit del relay NWC.
+  const nwcConn = process.env.ISSUER_NWC || process.env.REWARD_NWC;
+  if (nwcConn && payments.mode === "nwc") {
+    listenNwcPayments(nwcConn, (paymentHash, amountSats) => {
+      console.log(`⚡ NWC payment_received: hash=${paymentHash.slice(0, 10)}… (${amountSats} sats)`);
+      fulfillOrder(paymentHash).catch((e) => console.error("fulfill (notification):", e));
+    });
+  }
+
+  // Poller de cobro como fallback: corre cada 5 min en caso de que la notificación
+  // no llegue (wallet que no soporta kind 23196). Secuencial para no agotar rate limit.
+  const POLL_MS = Number(process.env.ORDER_POLL_MS || "300000"); // 5 min fallback
   const ORDER_EXPIRY_SECS = 30 * 60; // 30 min en segundos (ts de las órdenes está en segundos)
   setInterval(async () => {
     const pending = pendingOrders();
-    const nowSecs = now(); // segundos — mismo formato que Order.ts
+    const nowSecs = now();
     for (const o of pending) {
       if (nowSecs - o.ts > ORDER_EXPIRY_SECS) {
         console.log(`⏰ orden ${o.paymentHash.slice(0, 10)}… expirada (+30 min) → failed`);
@@ -509,8 +521,7 @@ async function main() {
         continue;
       }
       await fulfillOrder(o.paymentHash).catch((e) => console.error("fulfill error:", e));
-      // Pausa entre cada lookup para no saturar el rate limit del relay NWC
-      await new Promise<void>((r) => setTimeout(r, 3000));
+      await new Promise<void>((r) => setTimeout(r, 5000));
     }
   }, POLL_MS);
 
