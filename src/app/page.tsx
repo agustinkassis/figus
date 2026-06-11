@@ -59,6 +59,11 @@ function HomeInner() {
   // marcas nueva/repetida alineadas. Lo usan tanto los sobres dev como los reales.
   const pendingPlacement = useRef<number[]>([]);
   const pendingPlacementMarks = useRef<PackMark[]>([]);
+  // Figuritas NUEVAS cuya animación de pegado todavía no aterrizó: el álbum las
+  // muestra como casillero vacío hasta que la carta cae. En el flujo real la
+  // tenencia ya llegó vía 30100 ANTES de la animación — sin esta máscara la figu
+  // aparece pegada en el casillero desde que arranca el efecto.
+  const [pendingPaste, setPendingPaste] = useState<Set<number>>(new Set());
 
   // Encola figuritas (con sus marcas) para el efecto de pegado.
   function enqueuePlacement(nums: number[], marks: PackMark[]) {
@@ -74,8 +79,21 @@ function HomeInner() {
     const marks = pendingPlacementMarks.current;
     pendingPlacement.current = [];
     pendingPlacementMarks.current = [];
+    // Enmascarar las nuevas hasta que su carta aterrice en el casillero.
+    const newOnes = nums.filter((_, i) => marks[i]?.isNew);
+    if (newOnes.length) setPendingPaste(prev => new Set([...prev, ...newOnes]));
     setRevealQueue(q => (q.length ? [...q, ...nums] : nums));
     setRevealMarks(m => (m.length ? [...m, ...marks] : marks));
+  }
+
+  // La carta aterrizó (o se salteó): el casillero ya puede mostrar la figu.
+  function unmaskPaste(nums: number[]) {
+    setPendingPaste(prev => {
+      if (!nums.some(n => prev.has(n))) return prev;
+      const next = new Set(prev);
+      for (const n of nums) next.delete(n);
+      return next;
+    });
   }
 
   // Ownership vivo, para clasificar nueva/repetida en handlers asíncronos
@@ -170,6 +188,7 @@ function HomeInner() {
 
   // Load which pages have already been claimed (persisted locally to drive button state)
   useEffect(() => {
+    setPendingPaste(new Set()); // máscara de pegado pendiente no sobrevive al cambio de cuenta
     if (!pubkey) { setClaimedPages([]); return; }
     try {
       const raw = localStorage.getItem(`figus_rewards_${pubkey}`);
@@ -710,6 +729,14 @@ function HomeInner() {
   function claimAlbum()          { return sendRewardClaim("album", "álbum completo"); }
 
   const dupesList = useMemo(() => dupes, [dupes]);
+  // Ownership que ve el ÁLBUM: sin las figus nuevas cuya animación de pegado
+  // sigue en vuelo — el casillero queda vacío hasta que la carta aterriza.
+  const albumOwnership = useMemo(() => {
+    if (pendingPaste.size === 0) return ownership;
+    const next = { ...ownership };
+    for (const n of pendingPaste) delete next[n];
+    return next;
+  }, [ownership, pendingPaste]);
   // Hide listings the user has already paid for locally, before ISSUER publishes SETTLEMENT.
   const visibleListings = useMemo(
     () => listings.filter(l => !locallyRemovedListings.includes(l.id)),
@@ -993,7 +1020,7 @@ function HomeInner() {
             {visitedTabs.has("album") && (
               <div style={{ display: tab === "album" ? undefined : "none" }}>
                 <Album
-                  ownership={ownership}
+                  ownership={albumOwnership}
                   onClaim={claimPage}
                   onClaimAlbum={claimAlbum}
                   onSell={listForSale}
@@ -1145,12 +1172,19 @@ function HomeInner() {
             if (window.location.hash !== "#album") window.location.hash = "album";
             setAlbumFocus({ num, token: ++focusToken.current });
           }}
-          onPlace={isDev ? addSticker : () => {}}
-          onPlaceMany={isDev ? addStickers : () => {}}
+          onPlace={(num) => {
+            if (isDev) addSticker(num);
+            unmaskPaste([num]); // recién acá el casillero muestra la figu
+          }}
+          onPlaceMany={(nums) => {
+            if (isDev) addStickers(nums);
+            unmaskPaste(nums);
+          }}
           onFinish={(results) => {
             setRevealQueue([]);
             setRevealMarks([]);
             setAlbumFocus(null);
+            setPendingPaste(new Set()); // por si quedó alguna máscara colgada
             setRevealSummary(results);
           }}
         />
