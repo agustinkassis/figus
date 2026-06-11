@@ -383,7 +383,12 @@ function HomeInner() {
         ),
       ]);
       const paid = await tryPayInvoice(invoice);
-      if (paid) {
+      // tryPayInvoice puede tardar hasta 20s (timeouts de WebLN + NWC) y el GRANT
+      // puede llegar en el medio — si ya llegó, no mostrar la factura tarde sobre
+      // el sobre abierto.
+      if (grantReceived) {
+        setInvoice(null);
+      } else if (paid) {
         setInvoice(null);
         notify("⚡ Pago enviado — esperando figus del issuer…");
       } else {
@@ -474,7 +479,11 @@ function HomeInner() {
         ),
       ]);
       const paid = await tryPayInvoice(invoice);
-      if (paid) {
+      // Si el GRANT llegó mientras corrían los timeouts de WebLN/NWC, no mostrar
+      // la factura tarde sobre el sobre abierto.
+      if (grantReceived) {
+        setInvoice(null);
+      } else if (paid) {
         setInvoice(null);
         notify("⚡ Pago enviado — esperando figus del issuer…");
       } else {
@@ -639,6 +648,10 @@ function HomeInner() {
         setLocallyRemovedListings(prev =>
           prev.includes(listing.id) ? prev : [...prev, listing.id]
         );
+        setInvoice(null);
+      } else if (buyDelivered.current) {
+        // La entrega ya se acreditó (p. ej. vía onNwcPaid) mientras corrían los
+        // timeouts de WebLN/NWC — no mostrar la factura tarde.
         setInvoice(null);
       } else {
         setInvoiceAmount(listing.price);

@@ -1,6 +1,9 @@
 import "dotenv/config";
 import { verifyEvent, type Event } from "nostr-tools";
-import { RELAYS, ALBUM_ID, pool, publish, issuerPubkey, now, tag } from "./lib";
+import {
+  RELAYS, ALBUM_ID, pool, publish, issuerPubkey, now, tag,
+  manageSubscription, startSubscriptionWatchdog, closeManagedSubscriptions,
+} from "./lib";
 import { CATALOG, ALL_NUMBERS, rollSticker } from "../src/lib/catalog";
 import {
   parseMatch, parseCommit, parseBlock, parseReveal, deriveMatchState,
@@ -9,7 +12,13 @@ import { handleBetLock, handleBetCancel, loadBetState, settleBetsForMatch, payLn
 import { startFootballPoller } from "./football";
 import { getPayments } from "./payments";
 import { listenNwcPayments } from "../src/lib/nwc-server";
-import { getOrder, putOrder, updateOrder, pendingOrders, wasProcessed, markProcessed, type Order, type OrderAction } from "./store";
+import {
+  getOrder, putOrder, updateOrder, pendingOrders, pruneOrders,
+  wasProcessed, markProcessed, getWatermark, setWatermark,
+  getCachedOwnership, setCachedOwnership, flushSync,
+  acquireProcessLock, releaseProcessLock,
+  type Order, type OrderAction,
+} from "./store";
 
 const KIND = {
   OWNERSHIP: 30100,
@@ -35,7 +44,6 @@ const MARKET_FEE_RATE = 0.02; // 2% al vendedor en el mercado P2P
 
 const ISSUER = issuerPubkey();
 const payments = getPayments();
-const seen = new Set<string>();
 
 // Pubkey Nostr de la Lightning Address del issuer (puede diferir de ISSUER).
 // rizful.com y otros providers tienen su propia keypair para publicar receipts.
@@ -59,29 +67,30 @@ async function resolveLnPubkey(): Promise<void> {
 
 /**
  * Lee la cantidad vigente de una figu para un usuario (último 30100).
- * Mantiene un cache en memoria + consulta a relays como respaldo.
+ * El cache persiste en disco (data/ownership.json): el issuer es el único autor
+ * de los 30100, así que su espejo local sobrevive reinicios y solo consulta a
+ * relays la primera vez que ve una combinación usuario+figu.
  */
-const ownCache = new Map<string, number>(); // `${pk}:${num}` -> count
-
 function ownKey(pk: string, num: number) {
   return `${pk}:${num}`;
 }
 
 async function getOwnership(pk: string, num: number): Promise<number> {
   const key = ownKey(pk, num);
-  if (ownCache.has(key)) return ownCache.get(key)!;
-  // consultar a relays
+  const cached = getCachedOwnership(key);
+  if (cached !== undefined) return cached;
+  // consultar a relays (solo en frío: primera vez para este usuario+figu)
   const evs = await listOnce([
     { kinds: [KIND.OWNERSHIP], authors: [ISSUER], "#p": [pk], "#d": [`${pk}:${ALBUM_ID}:${num}`] },
   ]);
   const latest = evs.sort((a, b) => b.created_at - a.created_at)[0];
   const count = latest ? Number(tag(latest, "count") || "0") : 0;
-  ownCache.set(key, count);
+  setCachedOwnership(key, count);
   return count;
 }
 
 async function setOwnership(pk: string, num: number, count: number) {
-  ownCache.set(ownKey(pk, num), count);
+  setCachedOwnership(ownKey(pk, num), count);
   await publish({
     kind: KIND.OWNERSHIP,
     created_at: now(),
@@ -134,7 +143,11 @@ async function handleOpenPack(buyer: string, packCount = 1): Promise<number[]> {
     ],
   });
 
-  for (const n of drawn) await bump(buyer, n, +1);
+  // Un bump por figu ÚNICA (un pack-10 trae repetidas): publica un solo 30100
+  // con el count final en vez de un evento intermedio por copia.
+  const perSticker = new Map<number, number>();
+  for (const n of drawn) perSticker.set(n, (perSticker.get(n) ?? 0) + 1);
+  for (const [n, copies] of perSticker) await bump(buyer, n, +copies);
   console.log(`🎁 grant a ${buyer.slice(0, 8)}…: ${packCount} sobre(s), figus ${drawn.join(", ")}`);
   return drawn;
 }
@@ -325,8 +338,7 @@ async function settleBuySticker(order: Order) {
 }
 
 async function onReceipt(receipt: Event) {
-  if (seen.has(receipt.id) || wasProcessed("receipt", receipt.id)) return;
-  seen.add(receipt.id);
+  if (wasProcessed("receipt", receipt.id)) return;
   markProcessed("receipt", receipt.id);
 
   // El receipt 9735 debe ser un evento con firma válida (Fix #1/#3): un atacante ya
@@ -384,15 +396,12 @@ async function handleFreePack(ev: Event) {
 
 // ─── Robo de figuritas (penalty match) ───────────────────────────────────────
 
-const stealSeen = new Set<string>(); // coord:winner — dedup en memoria
-
 async function handleStealClaim(ev: Event) {
   if (!verifyEvent(ev)) return console.log("⚠️ steal claim con firma inválida");
   const coord = tag(ev, "a");
   if (!coord) return console.log("⚠️ steal claim sin coord de partida");
 
-  if (stealSeen.has(ev.id) || wasProcessed("steal", ev.id)) return;
-  stealSeen.add(ev.id);
+  if (wasProcessed("steal", ev.id)) return;
   markProcessed("steal", ev.id);
 
   console.log(`🃏 steal claim de ${ev.pubkey.slice(0, 8)}… para ${coord} (ev ${ev.id.slice(0, 10)}…)`);
@@ -505,6 +514,7 @@ async function handleStealClaim(ev: Event) {
 }
 
 async function main() {
+  acquireProcessLock(); // un solo issuer por data/ — dos a la vez duplican grants
   console.log("⚡ Issuer Figus");
   console.log("   pubkey:", ISSUER);
   console.log("   relays:", RELAYS.join(", "));
@@ -555,84 +565,80 @@ async function main() {
     }
   }, POLL_MS);
 
-  // Verificar conectividad: suscribirse a text notes para confirmar que llegan eventos
-  let connOk = false;
-  const connCheck = pool.subscribeMany(
-    RELAYS,
-    { kinds: [1], limit: 1 },
-    {
-      onevent: () => {
-        if (!connOk) {
-          connOk = true;
-          connCheck.close();
-          console.log("   ✅ Conectado a relays — recibiendo eventos");
-        }
+  // ── Suscripciones con watermark + recuperación de eventos perdidos ──────────
+  // Cada stream persiste el último created_at procesado (data/state.json). Al
+  // (re)abrir la suscripción, el `since` arranca del watermark con 60s de margen
+  // — acotado por maxBackfillS — así los eventos publicados mientras el issuer
+  // estaba caído se recuperan, y el ledger anti-replay descarta los duplicados
+  // que los relays re-entreguen.
+  function subscribeStream(
+    label: string,
+    kinds: number[],
+    handler: (ev: Event) => Promise<void> | void,
+    maxBackfillS: number
+  ) {
+    console.log(`   Escuchando ${label} (kinds ${kinds.join(",")})…`);
+    manageSubscription(
+      label,
+      () => {
+        const wm = getWatermark(label);
+        const floor = now() - maxBackfillS;
+        return { kinds, since: Math.max(wm ? wm - 60 : floor, floor) };
       },
-    }
-  );
-  setTimeout(() => {
-    if (!connOk) console.log("   ⚠️  Sin eventos tras 10s — verificá la conexión a internet");
-  }, 10000);
-
-  // Órdenes de compra (sobres y mercado) — el issuer emite y cobra la factura.
-  console.log("   Escuchando order requests (kind 1583)…");
-  pool.subscribeMany(
-    RELAYS,
-    { kinds: [KIND.ORDER_REQUEST], since: now() - 120 },
-    { onevent: (ev) => handleOrderRequest(ev).catch(console.error) }
-  );
-
-  // Sobre gratis (Fix #5) — concedido una vez por pubkey por el issuer.
-  console.log("   Escuchando free-pack claims (kind 30110)…");
-  pool.subscribeMany(
-    RELAYS,
-    { kinds: [KIND.FREE_PACK_CLAIM], since: now() - 300 },
-    { onevent: (ev) => handleFreePack(ev).catch(console.error) }
-  );
-
-  // Receipts de zap — ya SOLO para bet-lock (sobres/compras van por órdenes).
-  console.log("   Escuchando zap receipts (kind 9735) para bets…");
-  pool.subscribeMany(
-    RELAYS,
-    { kinds: [KIND.ZAP_RECEIPT], since: now() - 60 },
-    { onevent: onReceipt }
-  );
-
-  // Recuperar bet-lock receipts de los últimos 30 min que pudo haberse perdido
-  // durante un reinicio. El estado de la apuesta (sideAPaid) previene duplicados.
-  (async () => {
-    const recoverSince = now() - 30 * 60;
-    const recentReceipts = await pool.querySync(
-      RELAYS,
-      { kinds: [KIND.ZAP_RECEIPT], since: recoverSince },
-      { maxWait: 6000 }
-    );
-    let recovered = 0;
-    for (const ev of recentReceipts) {
-      const req = extractZapRequest(ev);
-      if (!req) continue;
-      const action = tag(req, "figus-action");
-      if (action === "bet-lock") {
-        await onReceipt(ev); // seen-set dedup + sideAPaid check en handleBetLock
-        recovered++;
+      (ev) => {
+        setWatermark(label, ev.created_at);
+        Promise.resolve(handler(ev)).catch(console.error);
       }
+    );
+  }
+
+  // Órdenes de compra: backfill corto — una factura emitida para un request muy
+  // viejo no le sirve a nadie (el comprador ya cerró la app) y expira sola.
+  subscribeStream("order-requests", [KIND.ORDER_REQUEST], handleOrderRequest, 30 * 60);
+  // Sobre gratis / steals / bet cancels: idempotentes y sin plata en juego al
+  // backfillear — vale la pena recuperar hasta 24h de downtime.
+  subscribeStream("free-pack-claims", [KIND.FREE_PACK_CLAIM], handleFreePack, 24 * 3600);
+  subscribeStream("steal-claims", [KIND.STEAL_CLAIM], handleStealClaim, 24 * 3600);
+  subscribeStream("bet-cancels", [KIND.BET_CANCEL], handleBetCancel, 24 * 3600);
+  // Receipts de zap (solo bet-lock): el watermark reemplaza al viejo bloque de
+  // recovery manual de 30 min — la suscripción ya backfillea desde donde quedó.
+  subscribeStream("zap-receipts", [KIND.ZAP_RECEIPT], onReceipt, 30 * 60);
+
+  // Watchdog: renueva las suscripciones cada 5 min. SimplePool no re-suscribe
+  // cuando un relay corta la conexión — sin esto el stream muere en silencio
+  // (visto en producción: el issuer dejó de ver los requests que llegaban por
+  // damus). La renovación relee el watermark, así no se pierde nada en el medio.
+  startSubscriptionWatchdog(Number(process.env.SUB_WATCHDOG_MS || String(5 * 60_000)));
+
+  // ── Housekeeping ─────────────────────────────────────────────────────────────
+  // Poda diaria de órdenes terminales viejas para que data/orders.json no crezca
+  // sin límite. Las pending no se tocan (las expira el poller por TTL).
+  const PRUNE_MAX_AGE_S = Number(process.env.ORDER_RETENTION_DAYS || "7") * 86400;
+  const pruned = pruneOrders(PRUNE_MAX_AGE_S);
+  if (pruned > 0) console.log(`   🧹 ${pruned} órdenes viejas podadas del ledger`);
+  setInterval(() => {
+    const n = pruneOrders(PRUNE_MAX_AGE_S);
+    if (n > 0) console.log(`🧹 housekeeping: ${n} órdenes viejas podadas`);
+  }, 24 * 3600 * 1000);
+
+  console.log("   ✅ Issuer listo");
+}
+
+// ── Shutdown ordenado ───────────────────────────────────────────────────────
+// pm2 manda SIGINT al reiniciar: volcamos el estado pendiente a disco y cerramos
+// las suscripciones para no perder watermarks ni marcas de procesado.
+for (const sig of ["SIGINT", "SIGTERM"] as const) {
+  process.on(sig, () => {
+    console.log(`\n${sig} recibido — guardando estado…`);
+    try {
+      flushSync();
+      closeManagedSubscriptions();
+      releaseProcessLock();
+    } catch (e) {
+      console.error("error en shutdown:", e);
     }
-    if (recovered > 0) console.log(`   ✅ Recuperados ${recovered} bet-lock receipt(s) perdidos`);
-  })().catch(console.error);
-
-  console.log("   Escuchando steal claims (kind 1580)…");
-  pool.subscribeMany(
-    RELAYS,
-    { kinds: [KIND.STEAL_CLAIM], since: now() - 300 },
-    { onevent: (ev) => handleStealClaim(ev).catch(console.error) }
-  );
-
-  console.log("   Escuchando bet cancels (kind 1593)…");
-  pool.subscribeMany(
-    RELAYS,
-    { kinds: [KIND.BET_CANCEL], since: now() - 300 },
-    { onevent: (ev) => handleBetCancel(ev).catch(console.error) }
-  );
+    process.exit(0);
+  });
 }
 
 main();
