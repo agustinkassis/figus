@@ -22,6 +22,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CATALOG, RARITY_META, TEAMS } from "@/lib/catalog";
 import { StickerFace } from "./StickerCard";
+import type { PackMark } from "./Packs";
 
 const CARD_W = 240;                 // ancho de la carta durante el reveal
 const CARD_H = CARD_W * (4 / 3);    // misma proporción 3/4 que los casilleros
@@ -44,6 +45,7 @@ export interface RevealResult {
 
 export function StickerPlacementFX({
   queue,
+  marks,
   ownership,
   onNavigate,
   onPlace,
@@ -52,6 +54,14 @@ export function StickerPlacementFX({
 }: {
   /** Números de figurita pendientes de revelar (puede crecer mientras corre). */
   queue: number[];
+  /**
+   * Clasificación nueva/repetida por índice de `queue`, precalculada al abrir el
+   * sobre. Cuando está presente manda sobre el ownership vivo — necesario en el
+   * flujo real, donde la tenencia ya se acreditó vía Nostr antes de la animación
+   * (si leyéramos ownership, todo saldría "repetida"). Sin marks, se infiere del
+   * ownership vivo (modo dev legacy).
+   */
+  marks?: PackMark[];
   /** Ownership actual — para detectar repetidas (se actualiza con cada commit). */
   ownership: Record<number, number>;
   /** Navega la app al álbum y a la página que contiene la figurita. */
@@ -71,6 +81,8 @@ export function StickerPlacementFX({
 
   const queueRef = useRef(queue);
   queueRef.current = queue;
+  const marksRef = useRef(marks);
+  marksRef.current = marks;
   const ownershipRef = useRef(ownership);
   ownershipRef.current = ownership;
   const committed = useRef<Set<number>>(new Set()); // índices ya pegados
@@ -111,7 +123,8 @@ export function StickerPlacementFX({
     for (let j = i; j < q.length; j++) {
       if (committed.current.has(j)) continue;
       const n = q[j];
-      const isNew = (counts[n] ?? 0) === 0;
+      const mk = marksRef.current?.[j];
+      const isNew = mk ? mk.isNew : (counts[n] ?? 0) === 0;
       counts[n] = (counts[n] ?? 0) + 1;
       committed.current.add(j);
       results.current.set(j, { num: n, isNew });
@@ -130,10 +143,12 @@ export function StickerPlacementFX({
     const sleep = (ms: number) =>
       new Promise<void>((r) => { timers.push(setTimeout(r, ms)); });
 
-    // ¿Repetida? — leída del ownership vivo (los commits previos de esta
-    // misma cola ya cuentan, así la segunda copia en una tirada sale "repe").
-    const had = ownershipRef.current[n] ?? 0;
-    const isDupe = had > 0;
+    // ¿Repetida? — si hay marks precalculadas, mandan (flujo real: el ownership
+    // ya está acreditado). Si no, se infiere del ownership vivo (modo dev legacy:
+    // los commits previos de esta misma cola ya cuentan).
+    const mark = marksRef.current?.[i];
+    const had = mark ? mark.copies - 1 : (ownershipRef.current[n] ?? 0);
+    const isDupe = mark ? !mark.isNew : had > 0;
 
     setSlotRect(null);
     setDupeHad(had);

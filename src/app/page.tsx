@@ -47,21 +47,35 @@ function HomeInner() {
   const isDev = process.env.NODE_ENV === "development";
   // Cola de figuritas pendientes de revelar con la animación de colocación.
   const [revealQueue, setRevealQueue] = useState<number[]>([]);
+  // Marcas (nueva/repetida) alineadas con revealQueue — precalculadas al abrir el
+  // sobre, para que la animación clasifique bien aunque la tenencia ya esté acreditada.
+  const [revealMarks, setRevealMarks] = useState<PackMark[]>([]);
   // Pedido de foco para el álbum: salta a la página que contiene la figurita.
   const [albumFocus, setAlbumFocus] = useState<{ num: number; token: number } | null>(null);
   const focusToken = useRef(0);
   // Resumen del lote al terminar la cola (modal con nuevas y repetidas).
   const [revealSummary, setRevealSummary] = useState<RevealResult[] | null>(null);
-  // Figuritas de sobres dev a la espera del efecto de pegado (corre al cerrar el sobre).
+  // Figuritas a la espera del efecto de pegado (corre al cerrar el sobre), con sus
+  // marcas nueva/repetida alineadas. Lo usan tanto los sobres dev como los reales.
   const pendingPlacement = useRef<number[]>([]);
+  const pendingPlacementMarks = useRef<PackMark[]>([]);
 
-  // Pasa las figuritas pendientes del sobre al efecto de pegado. Drena el ref,
+  // Encola figuritas (con sus marcas) para el efecto de pegado.
+  function enqueuePlacement(nums: number[], marks: PackMark[]) {
+    pendingPlacement.current = [...pendingPlacement.current, ...nums];
+    pendingPlacementMarks.current = [...pendingPlacementMarks.current, ...marks];
+  }
+
+  // Pasa las figuritas pendientes del sobre al efecto de pegado. Drena los refs,
   // así llamarla dos veces es inocuo.
   function queuePendingPlacement() {
     if (pendingPlacement.current.length === 0) return;
     const nums = pendingPlacement.current;
+    const marks = pendingPlacementMarks.current;
     pendingPlacement.current = [];
+    pendingPlacementMarks.current = [];
     setRevealQueue(q => (q.length ? [...q, ...nums] : nums));
+    setRevealMarks(m => (m.length ? [...m, ...marks] : marks));
   }
 
   // Ownership vivo, para clasificar nueva/repetida en handlers asíncronos
@@ -198,7 +212,9 @@ function HomeInner() {
         .filter((n) => n > 0);
       if (!nums.length) return;
       grantReceived = true;
-      setPackMarks(classifyPack(nums, packBaseline()));
+      const marks = classifyPack(nums, packBaseline());
+      setPackMarks(marks);
+      enqueuePlacement(nums, marks);
       claimPack(nums);
       setPackResult(nums);
       refresh();
@@ -232,7 +248,9 @@ function HomeInner() {
         unsubGrant?.();
         if (pollIv) clearInterval(pollIv);
         const nums = Array.from({ length: 7 }, () => rollSticker());
-        setPackMarks(classifyPack(nums, packBaseline()));
+        const marks = classifyPack(nums, packBaseline());
+        setPackMarks(marks);
+        enqueuePlacement(nums, marks);
         claimPack(nums);
         setPackResult(nums);
         setBusy(false);
@@ -263,7 +281,7 @@ function HomeInner() {
   function openPackDev() {
     const nums = Array.from({ length: 7 }, () => rollSticker());
     const marks = classifyPack(nums, packBaseline());
-    pendingPlacement.current = [...pendingPlacement.current, ...nums];
+    enqueuePlacement(nums, marks);
     setPackMarks(marks);
     setPackResult(nums);
   }
@@ -271,7 +289,7 @@ function HomeInner() {
   function openPackBulkDev() {
     const nums = Array.from({ length: 70 }, () => rollSticker());
     const marks = classifyPack(nums, packBaseline());
-    pendingPlacement.current = [...pendingPlacement.current, ...nums];
+    enqueuePlacement(nums, marks);
     const chunks: { figus: number[]; marks: PackMark[] }[] = [];
     for (let i = 0; i < nums.length; i += 7) {
       chunks.push({ figus: nums.slice(i, i + 7), marks: marks.slice(i, i + 7) });
@@ -284,7 +302,7 @@ function HomeInner() {
     const nums = Array.from({ length: 7 }, () => rollSticker());
     const marks = classifyPack(nums, packBaseline());
     claimPack([]); // marca el regalo como usado; acredita el FX al pegar cada una
-    pendingPlacement.current = [...pendingPlacement.current, ...nums];
+    enqueuePlacement(nums, marks);
     setPackMarks(marks);
     setPackResult(nums);
   }
@@ -311,7 +329,9 @@ function HomeInner() {
       if (!nums.length) return;
       grantReceived = true;
       setInvoice(null);
-      setPackMarks(classifyPack(nums, packBaseline()));
+      const marks = classifyPack(nums, packBaseline());
+      setPackMarks(marks);
+      enqueuePlacement(nums, marks);
       setPackResult(nums);
       refresh();
       unsubGrant?.();
@@ -404,6 +424,7 @@ function HomeInner() {
       setInvoice(null);
       const marks = classifyPack(nums, packBaseline());
       claimPack(nums);
+      enqueuePlacement(nums, marks);
       const chunks: { figus: number[]; marks: PackMark[] }[] = [];
       for (let i = 0; i < nums.length; i += 7) {
         chunks.push({ figus: nums.slice(i, i + 7), marks: marks.slice(i, i + 7) });
@@ -1093,10 +1114,13 @@ function HomeInner() {
         />
       )}
 
-      {/* Revelado espectacular de figuritas nuevas (dev tools) */}
+      {/* Revelado espectacular de figuritas: parte de la experiencia en dev y en
+          producción. El crédito de tenencia solo lo hace el FX en dev (sin Nostr);
+          en el flujo real la tenencia ya la acreditó el issuer (eventos 30100). */}
       {revealQueue.length > 0 && (
         <StickerPlacementFX
           queue={revealQueue}
+          marks={revealMarks.length === revealQueue.length ? revealMarks : undefined}
           ownership={ownership}
           onNavigate={(num) => {
             setTab("album");
@@ -1104,10 +1128,11 @@ function HomeInner() {
             if (window.location.hash !== "#album") window.location.hash = "album";
             setAlbumFocus({ num, token: ++focusToken.current });
           }}
-          onPlace={addSticker}
-          onPlaceMany={addStickers}
+          onPlace={isDev ? addSticker : () => {}}
+          onPlaceMany={isDev ? addStickers : () => {}}
           onFinish={(results) => {
             setRevealQueue([]);
+            setRevealMarks([]);
             setAlbumFocus(null);
             setRevealSummary(results);
           }}
@@ -1227,6 +1252,9 @@ function HomeInner() {
         }}
       >
         © 2026 Figus · Nostr + Lightning · Open source
+        {process.env.NEXT_PUBLIC_APP_VERSION && (
+          <span style={{ opacity: 0.6 }}> · v{process.env.NEXT_PUBLIC_APP_VERSION}</span>
+        )}
       </footer>
 
       {/* DEV MODE: banner fijo full-width (solo en development) */}
