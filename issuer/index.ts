@@ -251,27 +251,34 @@ async function handleOrderRequest(ev: Event) {
 const fulfilling = new Set<string>();
 
 // Concreta una orden ya pagada (idempotente vía ledger + guard de re-entrada).
-async function fulfillOrder(paymentHash: string) {
+// trustedSats: cuando viene de una notificación NWC (kind 23196), el pago ya
+// está confirmado — saltear lookup_invoice para no consumir rate limit.
+async function fulfillOrder(paymentHash: string, trustedSats?: number) {
   if (fulfilling.has(paymentHash)) return;
   const order = getOrder(paymentHash);
   if (!order || order.status !== "pending") return;
   fulfilling.add(paymentHash);
   try {
-    await fulfillOrderInner(order);
+    await fulfillOrderInner(order, trustedSats);
   } finally {
     fulfilling.delete(paymentHash);
   }
 }
 
-async function fulfillOrderInner(order: Order) {
+async function fulfillOrderInner(order: Order, trustedSats?: number) {
   const { paymentHash } = order;
   let info: { settled: boolean; amountSats: number };
-  try {
-    info = await payments.lookupInvoice(paymentHash);
-  } catch (e) {
-    return console.log(`   lookup ${paymentHash.slice(0, 10)}… falló: ${(e as Error).message}`);
+  if (trustedSats !== undefined) {
+    // Pago confirmado por notificación NWC — no necesitamos lookup_invoice.
+    info = { settled: true, amountSats: trustedSats };
+  } else {
+    try {
+      info = await payments.lookupInvoice(paymentHash);
+    } catch (e) {
+      return console.log(`   lookup ${paymentHash.slice(0, 10)}… falló: ${(e as Error).message}`);
+    }
+    if (!info.settled) return;
   }
-  if (!info.settled) return;
   // Verificar que se cobró al menos el monto esperado (Fix #1).
   if (info.amountSats > 0 && info.amountSats < order.amountSats) {
     console.log(`⚠️ pago insuficiente ${info.amountSats} < ${order.amountSats} sats — orden marcada failed`);
@@ -531,7 +538,8 @@ async function main() {
   if (nwcConn && payments.mode === "nwc") {
     listenNwcPayments(nwcConn, (paymentHash, amountSats) => {
       console.log(`⚡ NWC payment_received: hash=${paymentHash.slice(0, 10)}… (${amountSats} sats)`);
-      fulfillOrder(paymentHash).catch((e) => console.error("fulfill (notification):", e));
+      // Pasamos amountSats como "trusted" → fulfillOrderInner saltea lookup_invoice
+      fulfillOrder(paymentHash, amountSats).catch((e) => console.error("fulfill (notification):", e));
     });
   }
 
