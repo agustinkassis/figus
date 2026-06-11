@@ -496,11 +496,21 @@ async function main() {
   await loadBetState();
   startFootballPoller(settleBetsForMatch);
 
-  // Poller de cobro (Fix #1): concede las órdenes pendientes cuya factura ya se pagó.
-  const POLL_MS = Number(process.env.ORDER_POLL_MS || "6000");
-  setInterval(() => {
-    for (const o of pendingOrders()) {
-      fulfillOrder(o.paymentHash).catch((e) => console.error("fulfill error:", e));
+  // Poller de cobro: lookups secuenciales con pausa para no agotar el rate limit NWC.
+  const POLL_MS = Number(process.env.ORDER_POLL_MS || "30000"); // 30s entre ciclos
+  const ORDER_EXPIRY_MS = 30 * 60 * 1000; // expira órdenes de +30 min (nunca se van a pagar)
+  setInterval(async () => {
+    const pending = pendingOrders();
+    const now = Date.now();
+    for (const o of pending) {
+      if (now - o.ts > ORDER_EXPIRY_MS) {
+        console.log(`⏰ orden ${o.paymentHash.slice(0, 10)}… expirada (+30 min) → failed`);
+        updateOrder(o.paymentHash, { status: "failed" });
+        continue;
+      }
+      await fulfillOrder(o.paymentHash).catch((e) => console.error("fulfill error:", e));
+      // Pausa entre cada lookup para no saturar el rate limit del relay NWC
+      await new Promise<void>((r) => setTimeout(r, 3000));
     }
   }, POLL_MS);
 
