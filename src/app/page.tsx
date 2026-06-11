@@ -666,8 +666,7 @@ function HomeInner() {
 
   // --- reclamar premio de página/álbum completo ---
   async function sendRewardClaim(pageId: string, displayName: string) {
-    if (!identity) return notify("Conectate primero");
-    if (!pubkey) return;
+    if (!identity || !pubkey) return notify("Conectate primero");
     setBusy(true);
     try {
       const template: EventTemplate = {
@@ -998,6 +997,7 @@ function HomeInner() {
                   myListings={listings.filter(l => l.seller === pubkey)}
                   identity={identity ?? undefined}
                   focusSticker={albumFocus}
+                  busy={busy}
                 />
               </div>
             )}
